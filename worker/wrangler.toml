@@ -1,0 +1,9 @@
+name = "airscope-india-proxy"
+main = "index.ts"
+compatibility_date = "2024-01-01"
+
+# Environment variables for Cloudflare Worker
+[vars]
+ALLOWED_ORIGIN = "*"
+
+# In production, set DATA_GOV_IN_API_KEY via `npx wrangler secret put DATA_GOV_IN_API_KEY`
