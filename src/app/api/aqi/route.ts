@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AQIDataManager } from '@/lib/providers/manager';
 
-export const dynamic = 'force-dynamic';
+// In static export mode (Render Static Site), route handlers cannot use force-dynamic.
+// When deployed as Node server, force-dynamic ensures fresh real-time data.
+export const dynamic = process.env.STATIC_EXPORT === 'true' ? 'auto' : 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
