@@ -50,6 +50,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   const category = currentStation.category;
   const aqiValue = currentStation.aqi;
   const isStale = currentStation.isStale;
+  const freshness = currentStation.freshnessStatus || (isStale ? 'stale' : 'fresh');
 
   // Format timestamp in IST
   const formattedTime = new Date(currentStation.lastUpdated).toLocaleTimeString('en-IN', {
@@ -57,6 +58,45 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
     minute: '2-digit',
     timeZone: 'Asia/Kolkata',
   });
+
+  const getFreshnessBadge = () => {
+    if (currentStation.dataQualityStatus === 'sensor_offline' || aqiValue === null) {
+      return {
+        label: 'Sensor Offline / Pending Feed',
+        color: 'text-zinc-400 bg-zinc-500/10 border-zinc-500/30',
+        dot: 'bg-zinc-500',
+      };
+    }
+    switch (freshness) {
+      case 'fresh':
+        return {
+          label: 'Fresh (<1 hr)',
+          color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+          dot: 'bg-emerald-400',
+        };
+      case 'delayed':
+        return {
+          label: 'Delayed (1-3 hrs)',
+          color: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
+          dot: 'bg-amber-400',
+        };
+      case 'stale':
+        return {
+          label: 'Stale (>3 hrs)',
+          color: 'text-orange-400 bg-orange-500/10 border-orange-500/30',
+          dot: 'bg-orange-400',
+        };
+      case 'unavailable':
+      default:
+        return {
+          label: 'Unavailable',
+          color: 'text-red-400 bg-red-500/10 border-red-500/30',
+          dot: 'bg-red-400',
+        };
+    }
+  };
+
+  const badge = getFreshnessBadge();
 
   return (
     <section className="relative overflow-hidden pt-8 pb-14 border-b border-white/10">
@@ -192,8 +232,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                     <Clock className="w-3 h-3 text-gray-500" />
                     {formattedTime} IST
                   </span>
-                  <span className={isStale ? 'text-amber-400 font-medium' : 'text-emerald-400'}>
-                    {isStale ? '⚠️ Delayed (>2 hrs)' : '● Real-time CPCB'}
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-medium ${badge.color}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
+                    {badge.label}
                   </span>
                 </div>
               </div>

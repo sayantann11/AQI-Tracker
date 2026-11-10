@@ -271,15 +271,19 @@ export const LocationComparisonTable: React.FC<LocationComparisonTableProps> = (
 
                       {/* Freshness Status */}
                       <td className="py-3.5 px-4 text-center text-[11px]">
-                        {station.isStale ? (
-                          <span className="text-amber-400 flex items-center justify-center gap-1">
+                        {station.dataQualityStatus === 'sensor_offline' || station.aqi === null ? (
+                          <span className="text-zinc-500 font-mono text-[10px]">Offline</span>
+                        ) : station.freshnessStatus === 'delayed' ? (
+                          <span className="text-amber-400 flex items-center justify-center gap-1 font-mono text-[10px]">
                             <AlertCircle className="w-3 h-3" /> Delayed
                           </span>
-                        ) : station.dataQualityStatus === 'sensor_offline' ? (
-                          <span className="text-gray-500">Offline</span>
+                        ) : station.freshnessStatus === 'stale' || station.isStale ? (
+                          <span className="text-orange-400 flex items-center justify-center gap-1 font-mono text-[10px]">
+                            <AlertCircle className="w-3 h-3" /> Stale
+                          </span>
                         ) : (
-                          <span className="text-emerald-400 flex items-center justify-center gap-1">
-                            <Check className="w-3 h-3" /> Live
+                          <span className="text-emerald-400 flex items-center justify-center gap-1 font-mono text-[10px]">
+                            <Check className="w-3 h-3" /> Fresh
                           </span>
                         )}
                       </td>

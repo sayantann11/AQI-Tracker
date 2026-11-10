@@ -16,6 +16,9 @@ export interface StationMetadata {
   latitude: number;
   longitude: number;
   address: string;
+  aliases?: string[];
+  pincodes?: string[];
+  nearbyLocalities?: string[];
 }
 
 export const DELHI_NCR_STATIONS: StationMetadata[] = [
@@ -403,5 +406,85 @@ export const DELHI_NCR_STATIONS: StationMetadata[] = [
     latitude: 28.7516,
     longitude: 77.2885,
     address: 'Near Tehsil Office, Loni, Ghaziabad, UP 201102',
+  },
+];
+
+/**
+ * Key Delhi NCR localities without a direct CAAQMS monitoring station.
+ * Coordinates are used to calculate real-time distance to the closest verified station.
+ */
+export interface UnmonitoredLocality {
+  name: string;
+  city: 'Delhi' | 'Noida' | 'Greater Noida' | 'Gurugram' | 'Faridabad' | 'Ghaziabad';
+  latitude: number;
+  longitude: number;
+  pincode?: string;
+  description: string;
+}
+
+export const POPULAR_UNMONITORED_LOCALITIES: UnmonitoredLocality[] = [
+  {
+    name: 'Saket',
+    city: 'Delhi',
+    latitude: 28.5244,
+    longitude: 77.2066,
+    pincode: '110017',
+    description: 'Prominent South Delhi commercial and residential district with major shopping hubs.',
+  },
+  {
+    name: 'Hauz Khas',
+    city: 'Delhi',
+    latitude: 28.5494,
+    longitude: 77.2001,
+    pincode: '110016',
+    description: 'South Delhi neighborhood known for Hauz Khas Complex and residential colonies.',
+  },
+  {
+    name: 'Connaught Place',
+    city: 'Delhi',
+    latitude: 28.6315,
+    longitude: 77.2167,
+    pincode: '110001',
+    description: 'Central Delhi central business district and historic commercial center.',
+  },
+  {
+    name: 'Karol Bagh',
+    city: 'Delhi',
+    latitude: 28.6514,
+    longitude: 77.1907,
+    pincode: '110005',
+    description: 'Dense commercial and residential hub in Central-West Delhi.',
+  },
+  {
+    name: 'Lajpat Nagar',
+    city: 'Delhi',
+    latitude: 28.5677,
+    longitude: 77.2433,
+    pincode: '110024',
+    description: 'Major South Delhi residential and retail district centered around Central Market.',
+  },
+  {
+    name: 'Vasant Kunj',
+    city: 'Delhi',
+    latitude: 28.5293,
+    longitude: 77.1550,
+    pincode: '110070',
+    description: 'South West Delhi upscale residential neighborhood adjacent to the Ridge.',
+  },
+  {
+    name: 'Noida Sector 18',
+    city: 'Noida',
+    latitude: 28.5708,
+    longitude: 77.3260,
+    pincode: '201301',
+    description: 'Central commercial and retail hub of Noida (Atta Market / Mall of India).',
+  },
+  {
+    name: 'Cyber City (DLF Phase 2)',
+    city: 'Gurugram',
+    latitude: 28.4952,
+    longitude: 77.0895,
+    pincode: '122002',
+    description: 'Major corporate, IT, and financial business district in Gurugram.',
   },
 ];

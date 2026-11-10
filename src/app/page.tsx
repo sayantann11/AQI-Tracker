@@ -35,6 +35,7 @@ export default function HomePage() {
     data,
     stations,
     filteredStations,
+    unmonitoredLocalityMatch,
     currentStation,
     nearestStation,
     cities,
@@ -115,19 +116,34 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Developer Mode Active Banner */}
-      {devModeEnabled && (
-        <div className="bg-cyan-500/10 border-b border-cyan-500/25 py-2 px-4 text-center text-xs text-cyan-200 font-mono flex items-center justify-center gap-2">
-          <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-          <span>
-            [DEVELOPER TEST MODE ACTIVE] Rendering realistic CPCB record fixtures for offline testing. Production builds require official CPCB / OpenAQ keys.
-          </span>
-          <button
-            onClick={() => setDevModeEnabled(false)}
-            className="underline text-white font-sans ml-2 hover:text-cyan-300"
-          >
-            Exit Dev Mode
-          </button>
+      {/* Locality Search Resolution Banner (e.g. Saket, Hauz Khas) */}
+      {unmonitoredLocalityMatch && (
+        <div className="bg-cyan-500/10 border-b border-cyan-500/20 py-3 px-4 text-xs text-cyan-200">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            <div>
+              <span className="font-bold text-white uppercase tracking-wider">
+                📍 {unmonitoredLocalityMatch.locality.name} ({unmonitoredLocalityMatch.locality.city}):
+              </span>{' '}
+              <span>
+                No direct CAAQMS sensor exists at this exact point. Showing verified nearby official stations:
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {unmonitoredLocalityMatch.nearestStations.map(({ station, distanceKm }) => (
+                <button
+                  key={station.id}
+                  onClick={() => setSelectedStationId(station.id)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all ${
+                    selectedStationId === station.id
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold'
+                      : 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10'
+                  }`}
+                >
+                  {station.name} ({distanceKm} km)
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 

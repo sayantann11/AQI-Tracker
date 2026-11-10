@@ -1,4 +1,4 @@
-import { DELHI_NCR_STATIONS, StationMetadata } from '../fixtures/delhi-stations';
+import { DELHI_NCR_STATIONS, StationMetadata, POPULAR_UNMONITORED_LOCALITIES, UnmonitoredLocality } from '../fixtures/delhi-stations';
 
 /**
  * Calculates distance between two coordinates in kilometers using Haversine formula.
@@ -62,4 +62,58 @@ export function findNearestStation<T extends { latitude: number; longitude: numb
   }
 
   return { station: nearest, distanceKm: Math.round(minDistance * 10) / 10 };
+}
+
+/**
+ * Searches for a locality or returns closest monitored stations for unmonitored localities like Saket.
+ */
+export function resolveLocalityOrStation<T extends { id: string; name: string; city: string; latitude: number; longitude: number }>(
+  query: string,
+  stations: T[]
+): {
+  matchedStations: T[];
+  unmonitoredMatch?: {
+    locality: UnmonitoredLocality;
+    nearestStations: Array<{ station: T; distanceKm: number }>;
+  };
+} {
+  const q = query.trim().toLowerCase();
+  if (!q) return { matchedStations: stations };
+
+  // 1. Direct station matching
+  const directMatches = stations.filter(
+    (s) =>
+      s.name.toLowerCase().includes(q) ||
+      s.city.toLowerCase().includes(q) ||
+      s.id.toLowerCase().includes(q)
+  );
+
+  // 2. Check unmonitored localities directory (e.g. Saket, Karol Bagh, etc.)
+  const locality = POPULAR_UNMONITORED_LOCALITIES.find(
+    (l) =>
+      l.name.toLowerCase().includes(q) ||
+      q.includes(l.name.toLowerCase()) ||
+      (l.pincode && q.includes(l.pincode))
+  );
+
+  if (locality) {
+    // Sort stations by distance to this locality
+    const nearby = stations
+      .map((s) => ({
+        station: s,
+        distanceKm: Math.round(calculateDistanceKm(locality.latitude, locality.longitude, s.latitude, s.longitude) * 10) / 10,
+      }))
+      .sort((a, b) => a.distanceKm - b.distanceKm)
+      .slice(0, 3);
+
+    return {
+      matchedStations: directMatches.length > 0 ? directMatches : nearby.map((n) => n.station),
+      unmonitoredMatch: {
+        locality,
+        nearestStations: nearby,
+      },
+    };
+  }
+
+  return { matchedStations: directMatches };
 }

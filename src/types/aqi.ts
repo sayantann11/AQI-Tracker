@@ -45,6 +45,8 @@ export interface PollutantReading {
   isAvailable: boolean;
 }
 
+export type DataFreshness = 'fresh' | 'delayed' | 'stale' | 'unavailable';
+
 export interface StationMeasurement {
   id: string;
   name: string;
@@ -60,8 +62,12 @@ export interface StationMeasurement {
   lastUpdated: string; // ISO 8601 string
   fetchedAt: string;   // ISO 8601 string
   isStale: boolean;     // > 2 hours old
+  freshnessStatus?: DataFreshness;
   source: string;       // e.g., "CPCB via data.gov.in"
   dataQualityStatus: 'active' | 'stale' | 'sensor_offline' | 'insufficient_data';
+  agency?: string;
+  address?: string;
+  distanceKm?: number;
 }
 
 export interface CitySummary {

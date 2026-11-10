@@ -116,7 +116,7 @@ export class AQIDataManager {
    * If a station does not have a live reading in the current cycle,
    * it is included with a clear 'sensor_offline' status rather than being omitted.
    */
-  private reconcileStations(activeStations: StationMeasurement[]): StationMeasurement[] {
+  public reconcileStations(activeStations: StationMeasurement[]): StationMeasurement[] {
     const resultMap = new Map<string, StationMeasurement>();
 
     for (const station of activeStations) {
@@ -151,6 +151,9 @@ export class AQIDataManager {
           lastUpdated: now.toISOString(),
           fetchedAt: now.toISOString(),
           isStale: false,
+          freshnessStatus: 'unavailable',
+          agency: meta.agency,
+          address: meta.address,
           source: 'CPCB / State Board Network',
           dataQualityStatus: 'sensor_offline',
         });

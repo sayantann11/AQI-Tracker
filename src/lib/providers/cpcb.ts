@@ -2,6 +2,7 @@ import {
   StationMeasurement,
   PollutantId,
   PollutantReading,
+  DataFreshness,
 } from '@/types/aqi';
 import { AQIDataProvider, ProviderAttribution } from './types';
 import { DELHI_NCR_STATIONS, StationMetadata } from '../fixtures/delhi-stations';
@@ -50,6 +51,21 @@ export function parseCPCBDate(dateStr: string): Date {
   } catch {
     return new Date();
   }
+}
+
+/**
+ * Calculates 4-tier data freshness based on observation timestamp.
+ * - fresh: < 1 hour
+ * - delayed: 1 - 3 hours
+ * - stale: > 3 hours
+ * - unavailable: no valid timestamp
+ */
+export function getFreshnessStatus(date: Date, now: Date = new Date()): DataFreshness {
+  const diffHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+  if (isNaN(diffHours) || diffHours < 0) return 'unavailable';
+  if (diffHours <= 1) return 'fresh';
+  if (diffHours <= 3) return 'delayed';
+  return 'stale';
 }
 
 /**
@@ -197,6 +213,7 @@ export class CPCBProvider implements AQIDataProvider {
 
       const updateDate = parseCPCBDate(stationData.lastUpdate);
       const isStale = isMeasurementStale(updateDate, now);
+      const freshnessStatus = getFreshnessStatus(updateDate, now);
 
       // Build pollutant readings and sub-indices
       const pollutantConcentrations: Partial<Record<PollutantId, number | null>> = {};
@@ -256,7 +273,10 @@ export class CPCBProvider implements AQIDataProvider {
         lastUpdated: updateDate.toISOString(),
         fetchedAt: now.toISOString(),
         isStale,
+        freshnessStatus,
         source: 'CPCB via data.gov.in',
+        agency: metadata?.agency,
+        address: metadata?.address,
         dataQualityStatus: qualityStatus,
       });
     }

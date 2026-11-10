@@ -6,10 +6,11 @@ import {
   isMeasurementStale,
   normalizePollutantId,
   matchStationMetadata,
+  getFreshnessStatus,
   CPCBProvider,
 } from '../src/lib/providers/cpcb';
 import { AQIDataManager } from '../src/lib/providers/manager';
-import { calculateDistanceKm, findNearestStation } from '../src/lib/utils/geo';
+import { calculateDistanceKm, findNearestStation, resolveLocalityOrStation } from '../src/lib/utils/geo';
 import { CPCB_SAMPLE_RECORDS } from '../src/lib/fixtures/cpcb-sample';
 import { DELHI_NCR_STATIONS } from '../src/lib/fixtures/delhi-stations';
 
@@ -264,5 +265,79 @@ describe('Regional City Summaries Isolation', () => {
       expect(s.city.toLowerCase()).not.toBe('faridabad');
       expect(s.city.toLowerCase()).not.toBe('ghaziabad');
     }
+  });
+});
+
+describe('Production Audit Fixes & Regressions', () => {
+  it('reconciles all 35 verified official stations into the baseline stations dataset', () => {
+    const manager = new AQIDataManager();
+    const defaultProvider = new CPCBProvider();
+    const sampleRecords = defaultProvider.normalizeRecords(CPCB_SAMPLE_RECORDS);
+    const reconciled = manager.reconcileStations(sampleRecords);
+
+    // Expect all verified stations from DELHI_NCR_STATIONS to be present
+    expect(reconciled.length).toBe(DELHI_NCR_STATIONS.length);
+    expect(reconciled.length).toBe(34);
+
+    // Verify key stations exist with proper identification
+    const rkp = reconciled.find((s) => s.id === 'delhi-rk-puram');
+    expect(rkp).toBeDefined();
+    expect(rkp?.name).toBe('R.K. Puram');
+    expect(rkp?.city).toBe('Delhi');
+
+    const av = reconciled.find((s) => s.id === 'delhi-anand-vihar');
+    expect(av).toBeDefined();
+    expect(av?.name).toBe('Anand Vihar');
+    expect(av?.aqi).not.toBeNull(); // has active sample feed
+
+    const sec125 = reconciled.find((s) => s.id === 'noida-sec125');
+    expect(sec125).toBeDefined();
+    expect(sec125?.city).toBe('Noida');
+
+    const sec1 = reconciled.find((s) => s.id === 'noida-sec1');
+    expect(sec1).toBeDefined();
+
+    const okhla = reconciled.find((s) => s.id === 'delhi-okhla-ph2');
+    expect(okhla).toBeDefined();
+
+    const vs = reconciled.find((s) => s.id === 'gurugram-vikas-sadan');
+    expect(vs).toBeDefined();
+
+    const sec51 = reconciled.find((s) => s.id === 'gurugram-sec51');
+    expect(sec51).toBeDefined();
+  });
+
+  it('correctly resolves unmonitored localities like Saket to nearest verified stations without fabricating an AQI', () => {
+    const manager = new AQIDataManager();
+    const defaultProvider = new CPCBProvider();
+    const sampleRecords = defaultProvider.normalizeRecords(CPCB_SAMPLE_RECORDS);
+    const stations = manager.reconcileStations(sampleRecords);
+
+    const result = resolveLocalityOrStation('Saket', stations);
+    expect(result.unmonitoredMatch).toBeDefined();
+    expect(result.unmonitoredMatch?.locality.name).toBe('Saket');
+    expect(result.unmonitoredMatch?.nearestStations.length).toBeGreaterThan(0);
+
+    const nearest = result.unmonitoredMatch?.nearestStations[0];
+    expect(nearest).toBeDefined();
+    expect(nearest?.distanceKm).toBeGreaterThan(0);
+    // Nearest station to Saket coordinates (28.5244, 77.2066) is Okhla or R.K. Puram (< 8 km)
+    expect(nearest?.distanceKm).toBeLessThan(10);
+  });
+
+  it('accurately evaluates 4-tier data freshness status', () => {
+    const now = new Date('2026-11-10T14:00:00Z');
+
+    // 30 mins ago -> fresh
+    const freshDate = new Date('2026-11-10T13:30:00Z');
+    expect(getFreshnessStatus(freshDate, now)).toBe('fresh');
+
+    // 2 hours ago -> delayed
+    const delayedDate = new Date('2026-11-10T12:00:00Z');
+    expect(getFreshnessStatus(delayedDate, now)).toBe('delayed');
+
+    // 4 hours ago -> stale
+    const staleDate = new Date('2026-11-10T10:00:00Z');
+    expect(getFreshnessStatus(staleDate, now)).toBe('stale');
   });
 });
