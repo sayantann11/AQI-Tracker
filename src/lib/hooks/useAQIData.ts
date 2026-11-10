@@ -29,11 +29,21 @@ export function useAQIData() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCity, setSelectedCity] = useState<string>('All');
-  const [selectedStationId, setSelectedStationId] = useState<string>('delhi-anand-vihar');
+  // Initialize station from URL search parameter immediately on client mount
+  const [selectedStationId, setSelectedStationId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const param = new URLSearchParams(window.location.search).get('station');
+        if (param) return param;
+      } catch {}
+    }
+    return 'delhi-anand-vihar';
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [favorites, setFavorites] = useState<string[]>([]);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isLocating, setIsLocating] = useState(false);
+  const [hasPromptedLocation, setHasPromptedLocation] = useState(true);
   const [devModeEnabled, setDevModeEnabled] = useState(false);
 
   // Sync URL search parameters on mount (?station=... or ?q=...)
@@ -48,6 +58,14 @@ export function useAQIData() {
         const qParam = params.get('q');
         if (qParam) {
           setSearchQuery(qParam);
+        }
+
+        // Check if user has previously allowed or dismissed location
+        const storedGeo = localStorage.getItem('airscope_geo_allowed');
+        if (!storedGeo) {
+          setHasPromptedLocation(false);
+        } else if (storedGeo === 'true') {
+          requestLocation();
         }
       } catch {}
     }
@@ -125,18 +143,33 @@ export function useAQIData() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setIsLocating(false);
-        setUserLocation({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        });
+        setHasPromptedLocation(true);
+        try {
+          localStorage.setItem('airscope_geo_allowed', 'true');
+        } catch {}
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setUserLocation({ lat, lng });
+
+        // Automatically find and select the nearest reporting station
+        if (data?.stations?.length) {
+          const nearest = findNearestStation(lat, lng, data.stations.filter(s => s.aqi !== null));
+          if (nearest) {
+            updateStationId(nearest.station.id);
+          }
+        }
       },
       (geoErr) => {
         setIsLocating(false);
+        setHasPromptedLocation(true);
+        try {
+          localStorage.setItem('airscope_geo_allowed', 'denied');
+        } catch {}
         console.warn('User denied or location unavailable:', geoErr.message);
       },
       { timeout: 10000, enableHighAccuracy: false }
     );
-  }, []);
+  }, [data?.stations]);
 
   const updateStationId = useCallback((id: string) => {
     setSelectedStationId(id);
@@ -196,6 +229,13 @@ export function useAQIData() {
     userLocation,
     requestLocation,
     isLocating,
+    hasPromptedLocation,
+    dismissLocationPrompt: () => {
+      setHasPromptedLocation(true);
+      try {
+        localStorage.setItem('airscope_geo_allowed', 'dismissed');
+      } catch {}
+    },
     isLoading,
     error,
     devModeEnabled,

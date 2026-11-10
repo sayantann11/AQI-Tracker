@@ -6,6 +6,8 @@ import {
 } from '@/types/aqi';
 import { CPCBProvider, CPCB_ATTRIBUTION } from './cpcb';
 import { OpenAQProvider, OPENAQ_ATTRIBUTION } from './openaq';
+import { OpenMeteoProvider, OPEN_METEO_ATTRIBUTION } from './openmeteo';
+import { GoogleAQIProvider } from './google-aqi';
 import { getAQICategory } from '../aqi/category';
 import { CPCB_SAMPLE_RECORDS } from '../fixtures/cpcb-sample';
 import { DELHI_NCR_STATIONS } from '../fixtures/delhi-stations';
@@ -21,21 +23,101 @@ const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 export class AQIDataManager {
   private cpcbProvider: CPCBProvider;
   private openaqProvider: OpenAQProvider;
+  private openMeteoProvider: OpenMeteoProvider;
+  private googleProvider: GoogleAQIProvider;
 
   constructor() {
     this.cpcbProvider = new CPCBProvider();
     this.openaqProvider = new OpenAQProvider();
+    this.openMeteoProvider = new OpenMeteoProvider();
+    this.googleProvider = new GoogleAQIProvider();
   }
 
   isAnyProviderConfigured(): boolean {
-    return this.cpcbProvider.isConfigured() || this.openaqProvider.isConfigured();
+    return (
+      this.cpcbProvider.isConfigured() ||
+      this.openaqProvider.isConfigured() ||
+      this.googleProvider.isConfigured() ||
+      true // OpenMeteo is always configured
+    );
   }
 
-  getProviderStatus(): { cpcb: boolean; openaq: boolean } {
+  getProviderStatus(): { cpcb: boolean; openaq: boolean; openmeteo: boolean; google: boolean } {
     return {
       cpcb: this.cpcbProvider.isConfigured(),
       openaq: this.openaqProvider.isConfigured(),
+      openmeteo: true,
+      google: this.googleProvider.isConfigured(),
     };
+  }
+
+  /**
+   * Resolves AQI for specific coordinates by priority:
+   * 1. Nearest physical station with valid reporting telemetry (< 15km)
+   * 2. Google Maps AQI layer (if configured)
+   * 3. Copernicus CAMS atmospheric model (infallible fallback)
+   */
+  async getAQIForLocation(
+    lat: number,
+    lng: number,
+    locationName: string,
+    city: string = 'Delhi NCR'
+  ): Promise<{ primary: StationMeasurement; isEstimate: boolean }> {
+    const latest = await this.getLatestAQI(true);
+    const reportingStations = latest.stations.filter(
+      (s) => s.aqi !== null && s.dataQualityStatus === 'active'
+    );
+
+    // Compute nearest physical station
+    if (reportingStations.length > 0) {
+      const nearest = reportingStations
+        .map((s) => {
+          const dLat = ((s.latitude - lat) * Math.PI) / 180;
+          const dLng = ((s.longitude - lng) * Math.PI) / 180;
+          const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos((lat * Math.PI) / 180) *
+              Math.cos((s.latitude * Math.PI) / 180) *
+              Math.sin(dLng / 2) *
+              Math.sin(dLng / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          const dist = 6371 * c;
+          return { station: s, distKm: Math.round(dist * 10) / 10 };
+        })
+        .sort((a, b) => a.distKm - b.distKm)[0];
+
+      if (nearest && nearest.distKm <= 15) {
+        return {
+          primary: {
+            ...nearest.station,
+            distanceKm: nearest.distKm,
+          },
+          isEstimate: false,
+        };
+      }
+    }
+
+    // Google AQI fallback if key configured
+    if (this.googleProvider.isConfigured()) {
+      const googleResult = await this.googleProvider.fetchEstimateForCoordinates(
+        lat,
+        lng,
+        locationName,
+        city
+      );
+      if (googleResult) {
+        return { primary: googleResult, isEstimate: true };
+      }
+    }
+
+    // Open-Meteo Copernicus CAMS fallback
+    const modelResult = await this.openMeteoProvider.fetchEstimateForCoordinates(
+      lat,
+      lng,
+      locationName,
+      city
+    );
+    return { primary: modelResult, isEstimate: true };
   }
 
   /**

@@ -13,7 +13,8 @@ import { AffiliateShowcase } from '@/components/AffiliateShowcase';
 import { AdSlot } from '@/components/AdSlot';
 import { ShareModal } from '@/components/ShareModal';
 import { Footer } from '@/components/Footer';
-import { AlertCircle, Sparkles, Key, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { LocationSearchBar } from '@/components/LocationSearchBar';
+import { AlertCircle, Sparkles, Key, RefreshCw, CheckCircle2, Navigation2, X, Compass } from 'lucide-react';
 
 const InteractiveMap = dynamic(
   () => import('@/components/InteractiveMap').then((m) => m.InteractiveMap),
@@ -49,6 +50,8 @@ export default function HomePage() {
     toggleFavorite,
     requestLocation,
     isLocating,
+    hasPromptedLocation,
+    dismissLocationPrompt,
     isLoading,
     error,
     devModeEnabled,
@@ -76,6 +79,42 @@ export default function HomePage() {
         devModeEnabled={devModeEnabled}
         onToggleDevMode={() => setDevModeEnabled(!devModeEnabled)}
       />
+
+      {/* First-Time User Location Callout */}
+      {!hasPromptedLocation && (
+        <div className="bg-gradient-to-r from-emerald-950/80 via-[#0e1726] to-cyan-950/80 border-b border-emerald-500/30 py-3.5 px-4 text-xs">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                <Compass className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div>
+                <strong className="text-white text-sm block">Find the air quality around you</strong>
+                <span className="text-gray-300">
+                  Allow location access to instantly detect your nearest reporting official CAAQMS station.
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={requestLocation}
+                disabled={isLocating}
+                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold transition-all shadow-lg active:scale-95 flex items-center gap-1.5"
+              >
+                <Navigation2 className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin' : ''}`} />
+                <span>{isLocating ? 'Detecting...' : 'Use my location'}</span>
+              </button>
+              <button
+                onClick={dismissLocationPrompt}
+                className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+                title="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Geolocation Notification Pill */}
       {nearestStation && (
@@ -149,6 +188,27 @@ export default function HomePage() {
 
       {/* Main Content Area */}
       <main className="flex-1">
+        {/* Global Search Bar (Omni-Search for Indian Localities) */}
+        <section className="pt-6 px-4 max-w-7xl mx-auto flex flex-col items-center justify-center">
+          <LocationSearchBar
+            onLocationSelected={async ({ name, city, latitude, longitude }) => {
+              // Automatically find closest station or calculate model estimate
+              const { AQIDataManager } = await import('@/lib/providers/manager');
+              const mgr = new AQIDataManager();
+              const result = await mgr.getAQIForLocation(latitude, longitude, name, city);
+              if (result?.primary) {
+                // If it's a model estimate, inject it into stations list and select it
+                if (result.isEstimate) {
+                  data?.stations?.unshift(result.primary);
+                }
+                setSelectedStationId(result.primary.id);
+              }
+            }}
+            onLocateMe={requestLocation}
+            isLocating={isLocating}
+          />
+        </section>
+
         {/* Hero Section */}
         {currentStation && (
           <HeroSection

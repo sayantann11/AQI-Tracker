@@ -60,9 +60,23 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   });
 
   const getFreshnessBadge = () => {
+    if (currentStation.source.includes('Model')) {
+      return {
+        label: 'Atmospheric Model Estimate',
+        color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30',
+        dot: 'bg-cyan-400',
+      };
+    }
+    if (currentStation.distanceKm) {
+      return {
+        label: `Nearest Station (${currentStation.distanceKm} km away)`,
+        color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+        dot: 'bg-emerald-400',
+      };
+    }
     if (currentStation.dataQualityStatus === 'sensor_offline' || aqiValue === null) {
       return {
-        label: 'Sensor Offline / Pending Feed',
+        label: 'Temporarily Unavailable',
         color: 'text-zinc-400 bg-zinc-500/10 border-zinc-500/30',
         dot: 'bg-zinc-500',
       };
@@ -70,26 +84,26 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
     switch (freshness) {
       case 'fresh':
         return {
-          label: 'Fresh (<1 hr)',
+          label: 'Live Station Reading',
           color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
           dot: 'bg-emerald-400',
         };
       case 'delayed':
         return {
-          label: 'Delayed (1-3 hrs)',
+          label: 'Delayed Observation',
           color: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
           dot: 'bg-amber-400',
         };
       case 'stale':
         return {
-          label: 'Stale (>3 hrs)',
+          label: 'Stale Observation',
           color: 'text-orange-400 bg-orange-500/10 border-orange-500/30',
           dot: 'bg-orange-400',
         };
       case 'unavailable':
       default:
         return {
-          label: 'Unavailable',
+          label: 'Temporarily Unavailable',
           color: 'text-red-400 bg-red-500/10 border-red-500/30',
           dot: 'bg-red-400',
         };
@@ -228,11 +242,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 </div>
 
                 <div className="flex items-center justify-between text-[11px] text-gray-400 pt-1">
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-gray-500" />
-                    {formattedTime} IST
+                  <span className="truncate max-w-[150px]">
+                    {currentStation.city}
                   </span>
-                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-medium ${badge.color}`}>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-semibold ${badge.color}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
                     {badge.label}
                   </span>
