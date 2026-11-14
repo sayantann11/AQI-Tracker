@@ -249,7 +249,10 @@ export class CPCBProvider implements AQIDataProvider {
 
       if (pollutantId && rawAvg !== undefined && rawAvg !== null && rawAvg !== '') {
         const numAvg = parseFloat(String(rawAvg));
-        if (!isNaN(numAvg)) {
+        // Ambient CO is ~0.2-10 mg/m3. Some feed rows report CO on another scale (values like 88-140),
+        // which would pin the AQI at 500; treat those readings as invalid.
+        const implausible = pollutantId === 'co' && numAvg > 30;
+        if (!isNaN(numAvg) && !implausible) {
           const station = stationsMap.get(stationKey)!;
           station.pollutants[pollutantId] = {
             avg: numAvg,
