@@ -77,8 +77,8 @@ export const PollutantCards: React.FC<PollutantCardsProps> = ({ station }) => {
                         Sub-Index: {reading.subIndex}
                       </span>
                     ) : (
-                      <span className="text-[10px] font-mono text-gray-500 bg-white/5 px-2 py-0.5 rounded border border-white/5">
-                        Offline
+                      <span className="text-[10px] font-mono text-gray-400 bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                        {reading?.pollutantStatus === 'not_monitored' ? 'Not Monitored' : 'Sensor Offline'}
                       </span>
                     )}
                   </div>
@@ -95,7 +95,11 @@ export const PollutantCards: React.FC<PollutantCardsProps> = ({ station }) => {
                     ) : (
                       <div className="flex items-center gap-1.5 text-xs text-gray-500 font-mono py-1">
                         <AlertCircle className="w-3.5 h-3.5" />
-                        <span>No sensor stream</span>
+                        <span>
+                          {reading?.pollutantStatus === 'not_monitored'
+                            ? 'Not monitored at station'
+                            : 'Sensor stream pending'}
+                        </span>
                       </div>
                     )}
                   </div>

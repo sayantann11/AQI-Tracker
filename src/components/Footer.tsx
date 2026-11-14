@@ -205,8 +205,8 @@ export const Footer: React.FC = () => {
           <p>
             <strong className="text-gray-300">No Implied Endorsement:</strong> In compliance with GODL licensing conditions,
             the Government of India, CPCB, and contributing departments do not endorse AirScope India, this website, or any
-            commercial products featured herein. AirScope India does not calculate fabricated interpolated readings between
-            stations.
+            commercial products featured herein. Where a station is offline we may show a clearly marked atmospheric-model estimate
+            (Copernicus CAMS via Open-Meteo, CC BY 4.0); additional station data comes from OpenAQ.
           </p>
         </div>
 
@@ -221,6 +221,16 @@ export const Footer: React.FC = () => {
             <Link href="/delhi" className="hover:text-white">Delhi Stations</Link>
             <span>•</span>
             <Link href="/noida" className="hover:text-white">Noida Stations</Link>
+            <span>•</span>
+            <Link href="/about" className="hover:text-white">About</Link>
+            <span>•</span>
+            <Link href="/privacy" className="hover:text-white">Privacy</Link>
+            <span>•</span>
+            <Link href="/terms" className="hover:text-white">Terms</Link>
+            <span>•</span>
+            <Link href="/disclaimer" className="hover:text-white">Disclaimer</Link>
+            <span>•</span>
+            <Link href="/contact" className="hover:text-white">Contact</Link>
           </div>
         </div>
       </div>

@@ -1,220 +1,240 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { StationMeasurement, CitySummary, AQIApiResponse } from '@/types/aqi';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { StationMeasurement, AQIApiResponse } from '@/types/aqi';
 import { findNearestStation, resolveLocalityOrStation } from '../utils/geo';
-import { CPCBProvider } from '../providers/cpcb';
-import { CPCB_SAMPLE_RECORDS } from '../fixtures/cpcb-sample';
-import { DELHI_NCR_STATIONS } from '../fixtures/delhi-stations';
-import { AQIDataManager } from '../providers/manager';
+import { reverseGeocodeIndianCoordinates, ReverseGeocodedResult } from '../utils/geocoding';
 
-const defaultProvider = new CPCBProvider();
-const manager = new AQIDataManager();
-// Canonical source of truth: all 35 official stations reconciled on startup
-const sampleRecords = defaultProvider.normalizeRecords(CPCB_SAMPLE_RECORDS);
-const initialStations = manager.reconcileStations(sampleRecords);
+export interface UserLocationState extends Partial<ReverseGeocodedResult> {
+  lat: number;
+  lng: number;
+}
 
-const initialData: AQIApiResponse = {
-  success: true,
-  timestamp: new Date().toISOString(),
-  source: 'Official CPCB CAAQMS Network',
-  cached: false,
-  stations: initialStations,
-  cities: [],
-  attribution: defaultProvider.attribution,
-};
+export interface GeolocationErrorState {
+  type: 'denied' | 'unavailable' | 'timeout';
+  message: string;
+}
+
+const DEFAULT_STATION = 'delhi-anand-vihar';
+const REFRESH_MS = 10 * 60 * 1000;
+
+const isReal = (s: StationMeasurement) => s.aqi !== null && !s.isEstimate;
 
 export function useAQIData() {
-  const [data, setData] = useState<AQIApiResponse | null>(initialData);
-  const [isLoading, setIsLoading] = useState(false);
+  // Start empty on both server and client so hydration always matches; real data arrives via fetch.
+  const [data, setData] = useState<AQIApiResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCity, setSelectedCity] = useState<string>('All');
-  // Initialize station from URL search parameter immediately on client mount
-  const [selectedStationId, setSelectedStationId] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const param = new URLSearchParams(window.location.search).get('station');
-        if (param) return param;
-      } catch {}
-    }
-    return 'delhi-anand-vihar';
-  });
+  const [selectedStationId, setSelectedStationId] = useState<string>(DEFAULT_STATION);
   const [searchQuery, setSearchQuery] = useState('');
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<UserLocationState | null>(null);
   const [isLocating, setIsLocating] = useState(false);
+  const [geoError, setGeoError] = useState<GeolocationErrorState | null>(null);
   const [hasPromptedLocation, setHasPromptedLocation] = useState(true);
-  const [devModeEnabled, setDevModeEnabled] = useState(false);
+  const [locationNotice, setLocationNotice] = useState<string | null>(null);
+  // Stations created for searched places / GPS (model estimates). Kept separate and immutable.
+  const [extraStations, setExtraStations] = useState<StationMeasurement[]>([]);
 
-  // Sync URL search parameters on mount (?station=... or ?q=...)
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const params = new URLSearchParams(window.location.search);
-        const stationParam = params.get('station');
-        if (stationParam) {
-          setSelectedStationId(stationParam);
-        }
-        const qParam = params.get('q');
-        if (qParam) {
-          setSearchQuery(qParam);
-        }
+  const geoRequestIdRef = useRef(0);
+  const dataRef = useRef<AQIApiResponse | null>(null);
+  dataRef.current = data;
 
-        // Check if user has previously allowed or dismissed location
-        const storedGeo = localStorage.getItem('airscope_geo_allowed');
-        if (!storedGeo) {
-          setHasPromptedLocation(false);
-        } else if (storedGeo === 'true') {
-          requestLocation();
-        }
-      } catch {}
-    }
-  }, []);
-
-  // Load favorites from localStorage
-  useEffect(() => {
+  const writeUrl = useCallback((params: Record<string, string | null>) => {
     try {
-      const saved = localStorage.getItem('airscope_favorites');
-      if (saved) {
-        setFavorites(JSON.parse(saved));
+      const url = new URL(window.location.href);
+      for (const [k, v] of Object.entries(params)) {
+        if (v === null) url.searchParams.delete(k);
+        else url.searchParams.set(k, v);
       }
-    } catch {
-      // ignore
-    }
+      window.history.pushState({}, '', url.toString());
+    } catch {}
   }, []);
 
-  const toggleFavorite = useCallback((stationId: string) => {
-    setFavorites((prev) => {
-      const updated = prev.includes(stationId)
-        ? prev.filter((id) => id !== stationId)
-        : [...prev, stationId];
-      try {
-        localStorage.setItem('airscope_favorites', JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
-  }, []);
+  const updateStationId = useCallback(
+    (id: string) => {
+      setSelectedStationId(id);
+      setLocationNotice(null);
+      writeUrl({ station: id, loc: null });
+    },
+    [writeUrl]
+  );
 
-  const fetchData = useCallback(async (useDevFixtures = false) => {
+  const fetchData = useCallback(async (bypassCache = false) => {
     setIsLoading(true);
-    setError(null);
-
-    const proxyUrl = process.env.NEXT_PUBLIC_API_PROXY_URL;
-    const apiUrl = proxyUrl ? `${proxyUrl}` : `/api/aqi${useDevFixtures ? '?dev=true' : ''}`;
-
     try {
-      const res = await fetch(apiUrl);
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: Failed to retrieve air quality data.`);
-      }
+      const res = await fetch(bypassCache ? '/api/aqi?fresh=true' : '/api/aqi', { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json: AQIApiResponse = await res.json();
       setData(json);
+      setError(json.success ? null : json.error || 'UPSTREAM_UNAVAILABLE');
     } catch (err: any) {
-      console.warn('Network fetch failed or unconfigured, evaluating offline fallback:', err);
-      // In static export or when API route returns 404, fallback to reconciled stations
-      const cpcb = new CPCBProvider();
-      const sampleStations = cpcb.normalizeRecords(CPCB_SAMPLE_RECORDS);
-      const allStations = manager.reconcileStations(sampleStations);
-      setData({
-        success: true,
-        timestamp: new Date().toISOString(),
-        source: 'Official CPCB CAAQMS Network (Baseline Mode)',
-        cached: false,
-        stations: allStations,
-        cities: [],
-        attribution: cpcb.attribution,
-      });
+      // Never swap in fake data. Keep whatever real data we already have and tell the user.
+      setError(err?.message || 'NETWORK_ERROR');
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchData(devModeEnabled);
-  }, [fetchData, devModeEnabled]);
+  /** Resolve any coordinates to a real station (<= 8 km) or a labelled model estimate via the server. */
+  const selectLocation = useCallback(
+    async (lat: number, lng: number, name: string, city: string) => {
+      setLocationNotice(null);
+      try {
+        const res = await fetch(
+          `/api/location?lat=${lat.toFixed(5)}&lng=${lng.toFixed(5)}&name=${encodeURIComponent(name)}&city=${encodeURIComponent(city)}`
+        );
+        if (res.status === 422) {
+          setLocationNotice('This tracker covers India. Please search for a place in India.');
+          return;
+        }
+        const json = await res.json();
+        if (!json?.success || !json.primary) throw new Error('no data');
+        const primary: StationMeasurement = json.primary;
 
-  // Geolocation handling
+        if (json.isEstimate) {
+          setExtraStations((prev) => [primary, ...prev.filter((s) => s.id !== primary.id)].slice(0, 5));
+          setSelectedStationId(primary.id);
+          writeUrl({ station: null, loc: `${lat.toFixed(4)},${lng.toFixed(4)},${name}` });
+          setLocationNotice(`No official monitor right at ${name}. ${primary.estimateNote || 'Showing an estimate for this spot.'}`);
+        } else {
+          setSelectedStationId(primary.id);
+          writeUrl({ station: primary.id, loc: null });
+          setLocationNotice(
+            `Showing ${primary.name}, the nearest official station to ${name}${primary.distanceKm ? ` (${primary.distanceKm} km away)` : ''}.`
+          );
+        }
+      } catch {
+        setLocationNotice('Could not get air quality for that place right now. Please try another location.');
+      }
+    },
+    [writeUrl]
+  );
+
   const requestLocation = useCallback(() => {
+    if (typeof window === 'undefined') return;
     if (!navigator.geolocation) {
-      setError('Geolocation is not supported by your browser.');
+      setGeoError({ type: 'unavailable', message: 'Geolocation is not supported by your browser. Please search for your locality manually.' });
       return;
     }
     setIsLocating(true);
+    setGeoError(null);
+    geoRequestIdRef.current += 1;
+    const reqId = geoRequestIdRef.current;
+
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setIsLocating(false);
+      async (pos) => {
+        if (geoRequestIdRef.current !== reqId) return;
         setHasPromptedLocation(true);
-        try {
-          localStorage.setItem('airscope_geo_allowed', 'true');
-        } catch {}
+        try { localStorage.setItem('airscope_geo_allowed', 'true'); } catch {}
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
-        setUserLocation({ lat, lng });
-
-        // Automatically find and select the nearest reporting station
-        if (data?.stations?.length) {
-          const nearest = findNearestStation(lat, lng, data.stations.filter(s => s.aqi !== null));
-          if (nearest) {
-            updateStationId(nearest.station.id);
-          }
-        }
+        let info: Partial<ReverseGeocodedResult> = {};
+        try { info = await reverseGeocodeIndianCoordinates(lat, lng); } catch {}
+        if (geoRequestIdRef.current !== reqId) return;
+        setUserLocation({ lat, lng, ...info });
+        await selectLocation(lat, lng, info.locality || 'Your location', info.city || 'Delhi NCR');
+        if (geoRequestIdRef.current === reqId) setIsLocating(false);
       },
       (geoErr) => {
+        if (geoRequestIdRef.current !== reqId) return;
         setIsLocating(false);
         setHasPromptedLocation(true);
-        try {
-          localStorage.setItem('airscope_geo_allowed', 'denied');
-        } catch {}
-        console.warn('User denied or location unavailable:', geoErr.message);
+        let type: GeolocationErrorState['type'] = 'unavailable';
+        let message = 'Location detection unavailable. Please search manually.';
+        if (geoErr.code === 1) {
+          type = 'denied';
+          message = 'Location permission was denied. You can search for your locality or station in the search bar above.';
+          try { localStorage.setItem('airscope_geo_allowed', 'denied'); } catch {}
+        } else if (geoErr.code === 2) {
+          message = 'Your position could not be determined. Please search for your locality.';
+        } else if (geoErr.code === 3) {
+          type = 'timeout';
+          message = 'Location request timed out. Please try again or search manually.';
+        }
+        setGeoError({ type, message });
       },
-      { timeout: 10000, enableHighAccuracy: false }
+      { timeout: 12000, enableHighAccuracy: false, maximumAge: 5 * 60 * 1000 }
     );
-  }, [data?.stations]);
+  }, [selectLocation]);
 
-  const updateStationId = useCallback((id: string) => {
-    setSelectedStationId(id);
-    if (typeof window !== 'undefined') {
-      try {
-        const url = new URL(window.location.href);
-        url.searchParams.set('station', id);
-        window.history.replaceState({}, '', url.toString());
-      } catch {}
-    }
+  // One-time client init: URL params, stored preferences, favourites
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const stationParam = params.get('station');
+      const locParam = params.get('loc');
+      if (stationParam) setSelectedStationId(stationParam);
+      const q = params.get('q');
+      if (q) setSearchQuery(q);
+
+      const stored = localStorage.getItem('airscope_geo_allowed');
+      if (!stored) setHasPromptedLocation(false);
+      else if (stored === 'true' && !stationParam && !locParam) requestLocation();
+
+      if (locParam) {
+        const [la, ln, ...rest] = locParam.split(',');
+        const lat = Number(la);
+        const lng = Number(ln);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) selectLocation(lat, lng, rest.join(',') || 'Your location', 'Delhi NCR');
+      }
+      const saved = localStorage.getItem('airscope_favorites');
+      if (saved) setFavorites(JSON.parse(saved));
+    } catch {}
+
+    const onPop = () => {
+      const p = new URLSearchParams(window.location.search).get('station');
+      if (p) setSelectedStationId(p);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Filtered stations based on city and search query (incorporating locality/alias resolution)
+  useEffect(() => {
+    fetchData(false);
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchData(false);
+    }, REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [fetchData]);
+
+  const toggleFavorite = useCallback((stationId: string) => {
+    setFavorites((prev) => {
+      const updated = prev.includes(stationId) ? prev.filter((id) => id !== stationId) : [...prev, stationId];
+      try { localStorage.setItem('airscope_favorites', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  }, []);
+
+  const stations = useMemo(() => [...extraStations, ...(data?.stations || [])], [extraStations, data?.stations]);
+
   const searchResolution = useMemo(() => {
-    if (!data?.stations) return { matchedStations: [], unmonitoredMatch: undefined };
-    const cityFiltered = data.stations.filter(
-      (s) => selectedCity === 'All' || s.city.toLowerCase() === selectedCity.toLowerCase()
-    );
+    const cityFiltered = stations.filter((s) => selectedCity === 'All' || s.city.toLowerCase() === selectedCity.toLowerCase());
     return resolveLocalityOrStation(searchQuery, cityFiltered);
-  }, [data?.stations, selectedCity, searchQuery]);
+  }, [stations, selectedCity, searchQuery]);
 
-  const filteredStations = searchResolution.matchedStations;
-  const unmonitoredLocalityMatch = searchResolution.unmonitoredMatch;
-
-  // Selected station measurement object
   const currentStation = useMemo(() => {
-    if (!data?.stations?.length) return null;
+    if (!stations.length) return null;
     return (
-      data.stations.find((s) => s.id === selectedStationId) ||
-      data.stations.find((s) => s.aqi !== null) ||
-      data.stations[0]
+      stations.find((s) => s.id === selectedStationId) ||
+      stations.find(isReal) ||
+      stations[0]
     );
-  }, [data?.stations, selectedStationId]);
+  }, [stations, selectedStationId]);
 
-  // Nearest station calculation
   const nearestStation = useMemo(() => {
-    if (!userLocation || !data?.stations?.length) return null;
-    return findNearestStation(userLocation.lat, userLocation.lng, data.stations);
-  }, [userLocation, data?.stations]);
+    if (!userLocation) return null;
+    const real = stations.filter(isReal);
+    return real.length ? findNearestStation(userLocation.lat, userLocation.lng, real) : null;
+  }, [userLocation, stations]);
 
   return {
     data,
-    stations: data?.stations || [],
-    filteredStations,
-    unmonitoredLocalityMatch,
+    stations,
+    filteredStations: searchResolution.matchedStations,
+    unmonitoredLocalityMatch: searchResolution.unmonitoredMatch,
     currentStation,
     nearestStation,
     cities: data?.cities || [],
@@ -228,18 +248,19 @@ export function useAQIData() {
     toggleFavorite,
     userLocation,
     requestLocation,
+    selectLocation,
+    locationNotice,
+    clearLocationNotice: () => setLocationNotice(null),
     isLocating,
+    geoError,
+    clearGeoError: () => setGeoError(null),
     hasPromptedLocation,
     dismissLocationPrompt: () => {
       setHasPromptedLocation(true);
-      try {
-        localStorage.setItem('airscope_geo_allowed', 'dismissed');
-      } catch {}
+      try { localStorage.setItem('airscope_geo_allowed', 'dismissed'); } catch {}
     },
     isLoading,
     error,
-    devModeEnabled,
-    setDevModeEnabled,
-    refetch: () => fetchData(devModeEnabled),
+    refetch: (bypassCache = false) => fetchData(bypassCache),
   };
 }

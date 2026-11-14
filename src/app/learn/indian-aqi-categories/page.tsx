@@ -3,8 +3,9 @@ import Link from 'next/link';
 import { Navigation } from '@/components/Navigation';
 import { Footer } from '@/components/Footer';
 import { ShieldCheck, Heart, AlertTriangle } from 'lucide-react';
+import { getSiteUrl } from '@/lib/site';
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://airscope-india.onrender.com';
+const siteUrl = getSiteUrl();
 
 export const metadata: Metadata = {
   title: 'Indian AQI Categories Explained — Good to Severe Bands & Health Risks',
@@ -102,7 +103,7 @@ export default function IndianAQICategoriesPage() {
       name: 'AirScope India',
       logo: {
         '@type': 'ImageObject',
-        url: `${siteUrl}/logo.png`,
+        url: `${siteUrl}/icon.svg`,
       },
     },
     datePublished: '2024-01-22T00:00:00+05:30',

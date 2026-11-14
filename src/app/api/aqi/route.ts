@@ -1,50 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AQIDataManager } from '@/lib/providers/manager';
 
-// In static export mode (Render Static Site), route handlers cannot use force-dynamic.
-// When deployed as Node server, force-dynamic ensures fresh real-time data.
-export const dynamic = process.env.STATIC_EXPORT === 'true' ? 'auto' : 'force-dynamic';
+export const dynamic = 'force-dynamic';
+
+const CACHE = 'public, s-maxage=300, stale-while-revalidate=600';
 
 export async function GET(request: NextRequest) {
   try {
-    let allowDev = process.env.NODE_ENV === 'development';
-    let cityFilter: string | null = null;
+    const url = new URL(request.url);
+    const allowDev = url.searchParams.get('dev') === 'true';
+    const fresh = url.searchParams.get('fresh') === 'true';
+    const city = url.searchParams.get('city');
 
-    if (request?.url) {
-      try {
-        const url = new URL(request.url);
-        if (url.searchParams.get('dev') === 'true') {
-          allowDev = true;
-        }
-        cityFilter = url.searchParams.get('city');
-      } catch {
-        // Fallback for static collection
-      }
-    }
+    const data = await new AQIDataManager().getLatestAQI(allowDev, fresh);
+    const body = city
+      ? { ...data, stations: data.stations.filter((s) => s.city.toLowerCase() === city.toLowerCase()) }
+      : data;
 
-    const manager = new AQIDataManager();
-    const data = await manager.getLatestAQI(allowDev);
-
-    if (cityFilter) {
-      const filteredStations = data.stations.filter(
-        (s) => s.city.toLowerCase() === cityFilter.toLowerCase()
-      );
-      return NextResponse.json({
-        ...data,
-        stations: filteredStations,
-      });
-    }
-
-    return NextResponse.json(data);
+    return NextResponse.json(body, { headers: { 'Cache-Control': fresh ? 'no-store' : CACHE } });
   } catch (error: any) {
-    console.error('API route error in /api/aqi:', error);
+    console.error('API /api/aqi error:', error);
     return NextResponse.json(
-      {
-        success: false,
-        error: error.message || 'Internal server error while fetching air quality data',
-        timestamp: new Date().toISOString(),
-      },
-      { status: 500 }
+      { success: false, error: 'INTERNAL_ERROR', timestamp: new Date().toISOString() },
+      { status: 500, headers: { 'Cache-Control': 'no-store' } }
     );
   }
 }

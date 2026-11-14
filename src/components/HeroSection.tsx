@@ -31,6 +31,22 @@ interface HeroSectionProps {
   stations: StationMeasurement[];
   onSelectStation: (id: string) => void;
   onOpenShare: () => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
+}
+
+function formatRelativeTime(isoDateStr: string): string {
+  try {
+    const diffMs = Date.now() - new Date(isoDateStr).getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} hr${diffHours > 1 ? 's' : ''} ago`;
+    return 'earlier today';
+  } catch {
+    return 'recently';
+  }
 }
 
 export const HeroSection: React.FC<HeroSectionProps> = ({
@@ -38,6 +54,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   stations,
   onSelectStation,
   onOpenShare,
+  onRefresh,
+  isRefreshing,
 }) => {
   if (!currentStation) {
     return (
@@ -60,9 +78,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   });
 
   const getFreshnessBadge = () => {
-    if (currentStation.source.includes('Model')) {
+    if (currentStation.isEstimate || /model/i.test(currentStation.source)) {
       return {
-        label: 'Atmospheric Model Estimate',
+        label: /nearby/i.test(currentStation.source) ? 'Estimated from nearby stations' : 'Atmospheric Model Estimate',
         color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30',
         dot: 'bg-cyan-400',
       };
@@ -134,14 +152,14 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
             <div className="space-y-2">
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.1]">
-                Understand the air <br />
+                Delhi NCR AQI today <br />
                 <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
-                  around you.
+                  live, by station.
                 </span>
               </h1>
               <p className="text-base sm:text-lg text-gray-400 max-w-xl font-normal leading-relaxed">
-                Real-time air quality intelligence for Delhi NCR and beyond. Hyperlocal sensor streams,
-                official CPCB health guidance, and interactive 3D environmental telemetry.
+                Live air quality for Delhi, Noida, Gurugram, Faridabad and Ghaziabad from official CPCB, DPCC, UPPCB and HSPCB
+                stations, with health guidance for every AQI band.
               </p>
             </div>
 
@@ -159,7 +177,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 >
                   {stations.map((st) => (
                     <option key={st.id} value={st.id}>
-                      {st.city} — {st.name} {st.aqi !== null ? `(AQI: ${st.aqi})` : '(Offline)'}
+                      {st.city} — {st.name} {st.aqi !== null ? `(AQI: ${st.aqi}${st.isEstimate ? ', est.' : ''})` : '(Offline)'}
                     </option>
                   ))}
                 </select>
@@ -174,6 +192,12 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 </button>
               </div>
             </div>
+
+            {currentStation.isEstimate && (
+              <p className="text-[11px] text-cyan-300/90 bg-cyan-500/10 border border-cyan-500/20 rounded-xl px-3 py-2 max-w-xl">
+                {currentStation.estimateNote || 'This value is an atmospheric model estimate, not a sensor reading.'}
+              </p>
+            )}
 
             {/* Health Statement Preview */}
             <div
@@ -240,6 +264,20 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                     {currentStation.prominentPollutant ? currentStation.prominentPollutant.toUpperCase() : 'PM2.5'}
                   </span>
                 </div>
+
+                <div className="flex items-center justify-between text-gray-300">
+                  <span className="text-gray-400">Observation Time:</span>
+                  <span className="font-mono text-gray-300 text-[11px]">
+                    {formatRelativeTime(currentStation.lastUpdated)} ({formattedTime} IST)
+                  </span>
+                </div>
+
+                {isStale && (
+                  <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-300 text-[10px] leading-snug flex items-start gap-1.5 mt-1">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-400" />
+                    <span>Observation delayed &gt;2 hrs by monitoring board. Awaiting next transmission cycle.</span>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between text-[11px] text-gray-400 pt-1">
                   <span className="truncate max-w-[150px]">

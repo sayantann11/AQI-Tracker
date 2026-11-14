@@ -1,11 +1,9 @@
 import { MetadataRoute } from 'next';
 import { DELHI_NCR_STATIONS } from '@/lib/fixtures/delhi-stations';
+import { getSiteUrl } from '@/lib/site';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL && !process.env.NEXT_PUBLIC_SITE_URL.includes('localhost')
-      ? process.env.NEXT_PUBLIC_SITE_URL
-      : 'https://airscope-india.onrender.com';
+  const siteUrl = getSiteUrl();
 
   const now = new Date();
   // Fixed release date for verified educational and static knowledge resources
@@ -55,6 +53,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.65,
   }));
 
+  const staticPages: MetadataRoute.Sitemap = ['about', 'contact', 'privacy', 'terms', 'disclaimer'].map((slug) => ({
+    url: `${siteUrl}/${slug}`,
+    lastModified: contentReleaseDate,
+    changeFrequency: 'yearly',
+    priority: 0.3,
+  }));
+
   return [
     {
       url: siteUrl,
@@ -72,5 +77,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...delhiLocalityUrls,
     ...noidaLocalityUrls,
     ...learnUrls,
+    ...staticPages,
   ];
 }

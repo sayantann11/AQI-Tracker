@@ -92,13 +92,14 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       const isSelected = station.id === selectedStationId;
       const color = station.category.color || '#64748b';
       const aqiText = station.aqi !== null ? station.aqi.toString() : '—';
+      const isEst = !!station.isEstimate;
 
       el.className = `station-marker cursor-pointer transition-transform duration-200 hover:scale-125 ${
         isSelected ? 'scale-125 z-30' : 'z-10'
       }`;
       el.innerHTML = `
         <div style="background-color: ${color}; box-shadow: 0 0 12px ${color}80;"
-             class="flex items-center justify-center w-8 h-8 rounded-full border-2 border-white/90 text-white font-mono text-xs font-bold shadow-lg">
+             class="flex items-center justify-center w-8 h-8 rounded-full border-2 ${isEst ? 'border-dashed border-cyan-200' : 'border-white/90'} text-white font-mono text-xs font-bold shadow-lg ${station.aqi === null ? 'opacity-60' : ''}">
           ${aqiText}
         </div>
       `;
@@ -113,7 +114,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
           <div class="flex items-center justify-between">
             <span class="text-gray-400">NAQI Reading:</span>
             <span class="font-bold font-mono px-2 py-0.5 rounded text-xs" style="background-color: ${station.category.bgColor}; color: ${station.category.textColor}; border: 1px solid ${station.category.borderColor};">
-              ${station.aqi !== null ? station.aqi : 'Offline'} (${station.category.label})
+              ${station.aqi !== null ? station.aqi : 'Offline'} (${station.category.label})${isEst ? ' est.' : ''}
             </span>
           </div>
           <div class="grid grid-cols-2 gap-1 text-[11px] pt-1">
@@ -122,7 +123,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
           </div>
           <div class="text-[10px] text-gray-400 pt-1 border-t border-white/5 flex items-center justify-between">
             <span>${station.source}</span>
-            <span>${station.isStale ? '⚠️ Delayed' : '● Live'}</span>
+            <span>${isEst ? '≈ Estimate' : station.aqi === null ? 'Offline' : station.isStale ? '⚠️ Delayed' : '● Live'}</span>
           </div>
         </div>
       `;

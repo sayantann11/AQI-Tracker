@@ -3,8 +3,9 @@ import Link from 'next/link';
 import { Navigation } from '@/components/Navigation';
 import { Footer } from '@/components/Footer';
 import { Activity, ShieldAlert, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { getSiteUrl } from '@/lib/site';
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://airscope-india.onrender.com';
+const siteUrl = getSiteUrl();
 
 export const metadata: Metadata = {
   title: 'PM2.5 vs PM10: Size, Differences & Health Impacts Explained',
@@ -39,7 +40,7 @@ export default function PM25vsPM10Page() {
       name: 'AirScope India',
       logo: {
         '@type': 'ImageObject',
-        url: `${siteUrl}/logo.png`,
+        url: `${siteUrl}/icon.svg`,
       },
     },
     datePublished: '2024-01-20T00:00:00+05:30',

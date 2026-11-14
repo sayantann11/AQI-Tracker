@@ -32,6 +32,9 @@ export interface AQICategoryInfo {
 
 export type PollutantId = 'pm25' | 'pm10' | 'no2' | 'so2' | 'co' | 'o3' | 'nh3';
 
+export type PollutantStatus = 'available' | 'missing' | 'not_monitored' | 'unavailable';
+export type StationStatus = 'reporting' | 'delayed' | 'not_reporting' | 'unavailable';
+
 export interface PollutantReading {
   id: PollutantId;
   name: string;
@@ -43,6 +46,7 @@ export interface PollutantReading {
   max?: number;
   avg?: number;
   isAvailable: boolean;
+  pollutantStatus?: PollutantStatus;
 }
 
 export type DataFreshness = 'fresh' | 'delayed' | 'stale' | 'unavailable';
@@ -63,11 +67,15 @@ export interface StationMeasurement {
   fetchedAt: string;   // ISO 8601 string
   isStale: boolean;     // > 2 hours old
   freshnessStatus?: DataFreshness;
+  stationStatus?: StationStatus;
   source: string;       // e.g., "CPCB via data.gov.in"
-  dataQualityStatus: 'active' | 'stale' | 'sensor_offline' | 'insufficient_data';
+  dataQualityStatus: 'active' | 'stale' | 'sensor_offline' | 'insufficient_data' | 'model_estimate';
   agency?: string;
   address?: string;
   distanceKm?: number;
+  isEstimate?: boolean;
+  /** Short human-readable explanation shown when a value is an estimate */
+  estimateNote?: string;
 }
 
 export interface CitySummary {
@@ -98,5 +106,18 @@ export interface AQIApiResponse {
     licenseUrl: string;
     datasetUrl: string;
   };
+  error?: string;
+  /** Per-provider health for the status endpoint and UI */
+  sources?: SourceStatus[];
+  /** True when the response is served from an older cache because upstream failed */
+  servedStale?: boolean;
+}
+
+export interface SourceStatus {
+  id: string;
+  name: string;
+  configured: boolean;
+  ok: boolean;
+  stationCount: number;
   error?: string;
 }

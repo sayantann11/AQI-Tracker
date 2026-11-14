@@ -9,6 +9,7 @@ import { DELHI_NCR_STATIONS, StationMetadata } from '../fixtures/delhi-stations'
 import { calculateNationalAQI, calculateSubIndex } from '../aqi/calculator';
 import { getAQICategory } from '../aqi/category';
 import { CPCBRecordFixture } from '../fixtures/cpcb-sample';
+import { matchStationByCoordinates } from '../utils/geo';
 
 export const CPCB_ATTRIBUTION: ProviderAttribution = {
   dataset: 'Real time Air Quality Index from various locations',
@@ -78,31 +79,84 @@ export function isMeasurementStale(date: Date, now: Date = new Date()): boolean 
 
 /**
  * Matches a station string from the CPCB feed to our verified station registry.
- * Uses alphanumeric normalization to handle punctuation and spacing variations
- * (e.g. "R K Puram" vs "R.K. Puram", "Sector-62" vs "Sector 62").
- * Does NOT fall back to cityStations[0] to avoid overwriting Anand Vihar with unmapped stations.
+ * Uses alphanumeric normalization, numeral standardization (Arabic vs Roman),
+ * agency suffix removal, and alias lookup.
+ * Does NOT fall back to arbitrary stations to avoid overwriting station identities.
  */
-export function matchStationMetadata(stationName: string, city: string): StationMetadata | null {
-  const normFeed = stationName.toLowerCase().replace(/[^a-z0-9]/g, '');
+export function matchStationMetadata(stationName: string, city?: string): StationMetadata | null {
+  if (!stationName) return null;
+
+  const normalizeStr = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/,\s*(delhi|noida|greater noida|gurugram|faridabad|ghaziabad)?[^,]*(dpcc|cpcb|uppcb|hspcb|iitm|imd|bmc|mpcb|wbpcb|kspcb)[^,]*/gi, '')
+      .replace(/phase[- ]?ii\b/g, 'phase2')
+      .replace(/phase[- ]?2\b/g, 'phase2')
+      .replace(/\bsec(tor)?[- ]?(\d+[a-z]?)\b/g, 'sector$2')
+      .replace(/[^a-z0-9]/g, '');
+
+  const normFeed = normalizeStr(stationName);
 
   for (const station of DELHI_NCR_STATIONS) {
-    const normName = station.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const normSlug = station.slug.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normName = normalizeStr(station.name);
+    const normSlug = normalizeStr(station.slug);
 
-    // Match exact normalized name or slug
-    if (normFeed.includes(normName) || normFeed.includes(normSlug) || normName.includes(normFeed)) {
+    // Exact or bidirectional substring match
+    if (
+      normFeed === normName ||
+      normFeed.includes(normName) ||
+      normName.includes(normFeed) ||
+      normFeed.includes(normSlug)
+    ) {
       return station;
     }
 
-    // Match primary locality token if distinctive (>= 4 characters)
-    const primaryLocality = station.slug.split('-')[0].replace(/[^a-z0-9]/g, '');
-    if (primaryLocality.length >= 4 && normFeed.includes(primaryLocality)) {
-      return station;
+    // Check station aliases
+    if (station.aliases) {
+      for (const alias of station.aliases) {
+        const normAlias = normalizeStr(alias);
+        if (
+          normFeed === normAlias ||
+          normFeed.includes(normAlias) ||
+          normAlias.includes(normFeed)
+        ) {
+          return station;
+        }
+      }
     }
   }
 
   // Do NOT fall back to arbitrary city stations; unmatched stations must retain their own identity
   return null;
+}
+
+/** Delhi NCR bounding box used to drop the rest of India from the national feed. */
+export function isInNCR(lat?: number, lng?: number): boolean {
+  if (lat === undefined || lng === undefined || !Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  return lat >= 28.15 && lat <= 29.05 && lng >= 76.7 && lng <= 77.85;
+}
+
+const NCR_CITY_NAMES = ['delhi', 'new delhi', 'noida', 'greater noida', 'gurugram', 'gurgaon', 'faridabad', 'ghaziabad'];
+
+/** Keep only Delhi NCR rows from the national feed (by coordinates, else by city/name). */
+export function filterNCRRecords(records: CPCBRecordFixture[]): CPCBRecordFixture[] {
+  return records.filter((record) => {
+    if (!record.station) return false;
+    const la = record.latitude ? parseFloat(String(record.latitude)) : NaN;
+    const lo = record.longitude ? parseFloat(String(record.longitude)) : NaN;
+    if (Number.isFinite(la) && Number.isFinite(lo) && la !== 0 && lo !== 0) return isInNCR(la, lo);
+    const cityOk = NCR_CITY_NAMES.includes((record.city || '').trim().toLowerCase());
+    return cityOk || matchStationMetadata(record.station, record.city) !== null;
+  });
+}
+
+function matchStationByCoordinatesStrict(lat: number, lng: number): StationMetadata | null {
+  const m = matchStationByCoordinates(lat, lng); // 3 km window
+  if (!m) return null;
+  // Tighten to 1.2 km so neighbouring Noida/Delhi sectors are never merged
+  const dLat = (m.latitude - lat) * 111;
+  const dLng = (m.longitude - lng) * 111 * Math.cos((lat * Math.PI) / 180);
+  return Math.sqrt(dLat * dLat + dLng * dLng) <= 1.2 ? m : null;
 }
 
 export class CPCBProvider implements AQIDataProvider {
@@ -127,26 +181,33 @@ export class CPCBProvider implements AQIDataProvider {
       );
     }
 
-    const url = new URL(DATA_GOV_IN_ENDPOINT);
-    url.searchParams.set('api-key', this.apiKey!);
-    url.searchParams.set('format', 'json');
-    url.searchParams.set('limit', '5000'); // Fetch complete national CAAQMS batch to ensure all NCR stations & PM2.5 feeds are included
+    // The feed is national (~3-4k rows). Page through it so no NCR station is silently cut off.
+    const PAGE = 1000;
+    const records: CPCBRecordFixture[] = [];
+    for (let offset = 0; offset < 8000; offset += PAGE) {
+      const url = new URL(DATA_GOV_IN_ENDPOINT);
+      url.searchParams.set('api-key', this.apiKey!);
+      url.searchParams.set('format', 'json');
+      url.searchParams.set('limit', String(PAGE));
+      url.searchParams.set('offset', String(offset));
 
-    const response = await fetch(url.toString(), {
-      headers: {
-        Accept: 'application/json',
-      },
-      next: { revalidate: 900 }, // 15-minute Next.js cache revalidation
-    });
-
-    if (!response.ok) {
-      throw new Error(`CPCB API error: HTTP ${response.status} ${response.statusText}`);
+      const response = await fetch(url.toString(), {
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(25000),
+      });
+      if (!response.ok) {
+        if (offset > 0 && records.length > 0) break; // keep what we have
+        throw new Error(`CPCB API error: HTTP ${response.status} ${response.statusText}`);
+      }
+      const data = await response.json();
+      const page: CPCBRecordFixture[] = data.records || [];
+      records.push(...page);
+      const total = Number(data.total ?? data.count ?? 0);
+      if (page.length < PAGE || (total && records.length >= total)) break;
     }
 
-    const data = await response.json();
-    const records: CPCBRecordFixture[] = data.records || [];
-
-    return this.normalizeRecords(records);
+    return this.normalizeRecords(filterNCRRecords(records));
   }
 
   /**
@@ -165,7 +226,6 @@ export class CPCBProvider implements AQIDataProvider {
 
     for (const record of records) {
       if (!record.station) continue;
-
       const stationKey = record.station.trim();
       const pollutantId = normalizePollutantId(record.pollutant_id);
 
@@ -205,7 +265,11 @@ export class CPCBProvider implements AQIDataProvider {
     const results: StationMeasurement[] = [];
 
     for (const [, stationData] of stationsMap) {
-      const metadata = matchStationMetadata(stationData.stationName, stationData.city);
+      // Coordinates are the most reliable identity; fall back to name matching only if they miss.
+      const metadata =
+        (stationData.latitude && stationData.longitude
+          ? matchStationByCoordinatesStrict(stationData.latitude, stationData.longitude)
+          : null) || matchStationMetadata(stationData.stationName, stationData.city);
       const lat = stationData.latitude || metadata?.latitude || 28.6139;
       const lng = stationData.longitude || metadata?.longitude || 77.2090;
       const cleanCity = metadata?.city || stationData.city || 'Delhi';
@@ -218,13 +282,13 @@ export class CPCBProvider implements AQIDataProvider {
       // Build pollutant readings and sub-indices
       const pollutantConcentrations: Partial<Record<PollutantId, number | null>> = {};
       const fullPollutants: Record<PollutantId, PollutantReading> = {
-        pm25: { id: 'pm25', name: 'Fine Particles', formula: 'PM2.5', value: null, unit: 'µg/m³', subIndex: null, isAvailable: false },
-        pm10: { id: 'pm10', name: 'Coarse Particles', formula: 'PM10', value: null, unit: 'µg/m³', subIndex: null, isAvailable: false },
-        no2: { id: 'no2', name: 'Nitrogen Dioxide', formula: 'NO₂', value: null, unit: 'µg/m³', subIndex: null, isAvailable: false },
-        so2: { id: 'so2', name: 'Sulphur Dioxide', formula: 'SO₂', value: null, unit: 'µg/m³', subIndex: null, isAvailable: false },
-        co: { id: 'co', name: 'Carbon Monoxide', formula: 'CO', value: null, unit: 'mg/m³', subIndex: null, isAvailable: false },
-        o3: { id: 'o3', name: 'Ozone', formula: 'O₃', value: null, unit: 'µg/m³', subIndex: null, isAvailable: false },
-        nh3: { id: 'nh3', name: 'Ammonia', formula: 'NH₃', value: null, unit: 'µg/m³', subIndex: null, isAvailable: false },
+        pm25: { id: 'pm25', name: 'Fine Particles', formula: 'PM2.5', value: null, unit: 'µg/m³', subIndex: null, isAvailable: false, pollutantStatus: 'not_monitored' },
+        pm10: { id: 'pm10', name: 'Coarse Particles', formula: 'PM10', value: null, unit: 'µg/m³', subIndex: null, isAvailable: false, pollutantStatus: 'not_monitored' },
+        no2: { id: 'no2', name: 'Nitrogen Dioxide', formula: 'NO₂', value: null, unit: 'µg/m³', subIndex: null, isAvailable: false, pollutantStatus: 'not_monitored' },
+        so2: { id: 'so2', name: 'Sulphur Dioxide', formula: 'SO₂', value: null, unit: 'µg/m³', subIndex: null, isAvailable: false, pollutantStatus: 'not_monitored' },
+        co: { id: 'co', name: 'Carbon Monoxide', formula: 'CO', value: null, unit: 'mg/m³', subIndex: null, isAvailable: false, pollutantStatus: 'not_monitored' },
+        o3: { id: 'o3', name: 'Ozone', formula: 'O₃', value: null, unit: 'µg/m³', subIndex: null, isAvailable: false, pollutantStatus: 'not_monitored' },
+        nh3: { id: 'nh3', name: 'Ammonia', formula: 'NH₃', value: null, unit: 'µg/m³', subIndex: null, isAvailable: false, pollutantStatus: 'not_monitored' },
       };
 
       for (const [pId, pData] of Object.entries(stationData.pollutants)) {
@@ -241,6 +305,7 @@ export class CPCBProvider implements AQIDataProvider {
             max: pData.max,
             avg: pData.avg,
             isAvailable: true,
+            pollutantStatus: 'available',
           };
         }
       }
@@ -256,11 +321,31 @@ export class CPCBProvider implements AQIDataProvider {
         qualityStatus = 'insufficient_data';
       }
 
-      const id = metadata?.id || `station-${cleanCity.toLowerCase()}-${stationData.stationName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}`;
+      const stationStatus = aqiResult.activeCount > 0
+        ? (isStale ? 'delayed' : 'reporting')
+        : 'not_reporting';
+
+      // Clean ID and human-friendly name
+      let id = metadata?.id;
+      let displayName = metadata?.name;
+      if (!id) {
+        const cleanName = stationData.stationName
+          .replace(/,\s*.*$/g, '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '');
+        const slugCity = cleanCity.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        id = `station-${slugCity}-${cleanName}`;
+      }
+      if (!displayName) {
+        displayName = stationData.stationName
+          .replace(/,\s*(delhi|noida|greater noida|gurugram|faridabad|ghaziabad|kolkata|mumbai|bengaluru)?\s*[-–]\s*[a-z0-9_]+/gi, '')
+          .trim();
+      }
 
       results.push({
         id,
-        name: metadata?.name || stationData.stationName,
+        name: displayName,
         city: cleanCity,
         state: cleanState,
         latitude: lat,
@@ -274,9 +359,10 @@ export class CPCBProvider implements AQIDataProvider {
         fetchedAt: now.toISOString(),
         isStale,
         freshnessStatus,
+        stationStatus,
         source: 'CPCB via data.gov.in',
-        agency: metadata?.agency,
-        address: metadata?.address,
+        agency: metadata?.agency || (stationData.stationName.match(/[-–]\s*([A-Za-z]+)\s*$/)?.[1] || 'CPCB'),
+        address: metadata?.address || `${displayName}, ${cleanCity}, ${cleanState}`,
         dataQualityStatus: qualityStatus,
       });
     }

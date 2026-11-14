@@ -1,0 +1,26 @@
+# Render Blueprint: deploy as a Node WEB SERVICE (not a Static Site).
+# A static site cannot run /api/aqi, which is why the live site only ever showed sample data.
+services:
+  - type: web
+    name: aqi-tracker
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: DATA_GOV_IN_API_KEY
+        sync: false
+      - key: OPENAQ_API_KEY
+        sync: false
+      - key: NEXT_PUBLIC_ENABLE_ADS
+        value: "false"
+      - key: NEXT_PUBLIC_ADSENSE_CLIENT_ID
+        sync: false
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false
+      - key: NEXT_PUBLIC_CONTACT_EMAIL
+        sync: false

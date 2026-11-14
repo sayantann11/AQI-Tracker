@@ -5,6 +5,8 @@ import { DELHI_NCR_STATIONS } from '@/lib/fixtures/delhi-stations';
 import { Navigation } from '@/components/Navigation';
 import { Footer } from '@/components/Footer';
 import { MapPin, ShieldCheck, ArrowLeft, Wind, ExternalLink, HelpCircle } from 'lucide-react';
+import { getSiteUrl } from '@/lib/site';
+import { LiveStationAQI } from '@/components/LiveStationAQI';
 
 interface LocalityPageProps {
   params: {
@@ -12,10 +14,7 @@ interface LocalityPageProps {
   };
 }
 
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL && !process.env.NEXT_PUBLIC_SITE_URL.includes('localhost')
-    ? process.env.NEXT_PUBLIC_SITE_URL
-    : 'https://airscope-india.onrender.com';
+const siteUrl = getSiteUrl();
 
 const LOCALITY_EDITORIAL: Record<
   string,
@@ -330,6 +329,8 @@ export default function LocalityPage({ params }: LocalityPageProps) {
           <span>/</span>
           <span className="text-white font-medium">{station.name}</span>
         </nav>
+
+        <LiveStationAQI stationId={station.id} title={`${station.name} AQI right now`} />
 
         {/* Hero Header */}
         <div className="space-y-4">

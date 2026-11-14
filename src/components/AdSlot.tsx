@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 
 interface AdSlotProps {
   slotId: string;
@@ -15,6 +15,15 @@ export const AdSlot: React.FC<AdSlotProps> = ({
 }) => {
   const adsEnabled = process.env.NEXT_PUBLIC_ENABLE_ADS === 'true';
   const adClientId = process.env.NEXT_PUBLIC_ADSENSE_CLIENT_ID;
+
+  useEffect(() => {
+    if (!adsEnabled) return;
+    try {
+      ((window as any).adsbygoogle = (window as any).adsbygoogle || []).push({});
+    } catch {
+      // ad blocker or script not ready: ignore
+    }
+  }, [adsEnabled]);
 
   // Reserved min-height dimensions to prevent Cumulative Layout Shift (CLS)
   const formatDimensions = {

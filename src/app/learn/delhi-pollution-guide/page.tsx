@@ -3,8 +3,9 @@ import Link from 'next/link';
 import { Navigation } from '@/components/Navigation';
 import { Footer } from '@/components/Footer';
 import { Wind, ArrowRight, ShieldCheck } from 'lucide-react';
+import { getSiteUrl } from '@/lib/site';
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://airscope-india.onrender.com';
+const siteUrl = getSiteUrl();
 
 export const metadata: Metadata = {
   title: 'Why is Delhi So Polluted in Winter? Science, Weather & Geography',
@@ -39,7 +40,7 @@ export default function DelhiPollutionGuidePage() {
       name: 'AirScope India',
       logo: {
         '@type': 'ImageObject',
-        url: `${siteUrl}/logo.png`,
+        url: `${siteUrl}/icon.svg`,
       },
     },
     datePublished: '2024-02-05T00:00:00+05:30',

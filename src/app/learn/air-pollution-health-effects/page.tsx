@@ -3,8 +3,9 @@ import Link from 'next/link';
 import { Navigation } from '@/components/Navigation';
 import { Footer } from '@/components/Footer';
 import { ShieldAlert, Heart, Activity, CheckCircle2 } from 'lucide-react';
+import { getSiteUrl } from '@/lib/site';
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://airscope-india.onrender.com';
+const siteUrl = getSiteUrl();
 
 export const metadata: Metadata = {
   title: 'Health Effects of Air Pollution & Protection Guide | AirScope India',
@@ -39,7 +40,7 @@ export default function AirPollutionHealthEffectsPage() {
       name: 'AirScope India',
       logo: {
         '@type': 'ImageObject',
-        url: `${siteUrl}/logo.png`,
+        url: `${siteUrl}/icon.svg`,
       },
     },
     datePublished: '2024-01-28T00:00:00+05:30',

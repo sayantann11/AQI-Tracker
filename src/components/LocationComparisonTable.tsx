@@ -235,9 +235,13 @@ export const LocationComparisonTable: React.FC<LocationComparisonTableProps> = (
                       {/* Numerical AQI */}
                       <td className="py-3.5 px-4 text-right font-mono font-bold text-sm">
                         {station.aqi !== null ? (
-                          <span style={{ color: cat.textColor }}>{station.aqi}</span>
+                          <span style={{ color: cat.textColor }}>
+                            {station.isEstimate ? '≈' : ''}{station.aqi}
+                          </span>
+                        ) : station.stationStatus === 'reporting' || station.pollutants.pm25.value !== null ? (
+                          <span className="text-cyan-400 text-xs font-normal">Partial Data</span>
                         ) : (
-                          <span className="text-gray-500">Offline</span>
+                          <span className="text-gray-500 text-xs font-normal">Pending</span>
                         )}
                       </td>
 
@@ -271,7 +275,9 @@ export const LocationComparisonTable: React.FC<LocationComparisonTableProps> = (
 
                       {/* Freshness Status */}
                       <td className="py-3.5 px-4 text-center text-[11px]">
-                        {station.dataQualityStatus === 'sensor_offline' || station.aqi === null ? (
+                        {station.isEstimate ? (
+                          <span className="text-cyan-400 font-mono text-[10px]" title={station.estimateNote}>Estimated</span>
+                        ) : station.dataQualityStatus === 'sensor_offline' || station.aqi === null ? (
                           <span className="text-zinc-500 font-mono text-[10px]">Offline</span>
                         ) : station.freshnessStatus === 'delayed' ? (
                           <span className="text-amber-400 flex items-center justify-center gap-1 font-mono text-[10px]">

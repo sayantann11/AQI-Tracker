@@ -15,7 +15,7 @@ export const PollutionInsights: React.FC<PollutionInsightsProps> = ({
   cities,
   onSelectStation,
 }) => {
-  const activeStations = stations.filter((s) => s.aqi !== null && s.aqi > 0);
+  const activeStations = stations.filter((s) => s.aqi !== null && s.aqi > 0 && !s.isEstimate);
 
   if (activeStations.length === 0) return null;
 
@@ -167,8 +167,8 @@ export const PollutionInsights: React.FC<PollutionInsightsProps> = ({
           <p className="leading-relaxed">
             <strong className="text-white">Scientific Integrity Note:</strong> Regional averages are calculated strictly
             from active continuous monitoring stations within municipal boundaries. Do not infer time trends from
-            individual hourly observations. AirScope India reports official CPCB/State Board telemetry and does not
-            fabricate interpolated readings between stations.
+            individual hourly observations. Highest/lowest values and averages use measured station data only. Where a
+            station is offline we may show a clearly marked atmospheric-model estimate (≈), which is never included in these summaries.
           </p>
         </div>
       </div>

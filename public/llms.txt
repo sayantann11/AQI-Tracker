@@ -1,0 +1,19 @@
+# AirScope India
+
+> Live air quality (AQI) for Delhi NCR: Delhi, Noida, Greater Noida, Gurugram, Faridabad, Ghaziabad. Readings come from official CPCB / DPCC / UPPCB / HSPCB monitoring stations (via data.gov.in and OpenAQ). Offline stations are clearly labelled and may show an atmospheric-model estimate.
+
+## Key pages
+- [Live Delhi NCR AQI map and station table](/)
+- [Delhi AQI by station](/delhi)
+- [Noida AQI](/noida)
+- [Gurugram AQI](/gurugram)
+- [Faridabad AQI](/faridabad)
+- [Ghaziabad AQI](/ghaziabad)
+- [Learn: what is AQI](/learn/what-is-aqi)
+- [Learn: how Indian AQI is calculated](/learn/how-aqi-is-calculated)
+- [About and data sources](/about)
+
+## Data notes
+- AQI follows the CPCB National AQI (NAQI) breakpoints.
+- Readings update about every 15-60 minutes depending on the station.
+- Not medical advice.

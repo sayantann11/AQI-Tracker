@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { useAQIData } from '@/lib/hooks/useAQIData';
 import { Navigation } from '@/components/Navigation';
 import { HeroSection } from '@/components/HeroSection';
@@ -14,7 +15,7 @@ import { AdSlot } from '@/components/AdSlot';
 import { ShareModal } from '@/components/ShareModal';
 import { Footer } from '@/components/Footer';
 import { LocationSearchBar } from '@/components/LocationSearchBar';
-import { AlertCircle, Sparkles, Key, RefreshCw, CheckCircle2, Navigation2, X, Compass } from 'lucide-react';
+import { AlertCircle, Info, Navigation2, X, Compass } from 'lucide-react';
 
 const InteractiveMap = dynamic(
   () => import('@/components/InteractiveMap').then((m) => m.InteractiveMap),
@@ -48,14 +49,18 @@ export default function HomePage() {
     setSearchQuery,
     favorites,
     toggleFavorite,
+    userLocation,
     requestLocation,
     isLocating,
+    geoError,
+    clearGeoError,
     hasPromptedLocation,
     dismissLocationPrompt,
+    selectLocation,
+    locationNotice,
+    clearLocationNotice,
     isLoading,
     error,
-    devModeEnabled,
-    setDevModeEnabled,
     refetch,
   } = useAQIData();
 
@@ -74,11 +79,42 @@ export default function HomePage() {
       <Navigation
         onLocateMe={requestLocation}
         isLocating={isLocating}
+        onRefresh={() => refetch(true)}
+        isRefreshing={isLoading}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        devModeEnabled={devModeEnabled}
-        onToggleDevMode={() => setDevModeEnabled(!devModeEnabled)}
       />
+
+      {/* Geolocation Error / Manual Search Prompt */}
+      {geoError && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30 py-3 px-4 text-xs text-amber-200">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>{geoError.message}</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => {
+                  clearGeoError();
+                  const searchInput = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement;
+                  searchInput?.focus();
+                }}
+                className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-100 font-semibold border border-amber-500/40 transition-all"
+              >
+                Search manually
+              </button>
+              <button
+                onClick={clearGeoError}
+                className="p-1 rounded text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+                title="Dismiss"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* First-Time User Location Callout */}
       {!hasPromptedLocation && (
@@ -133,23 +169,38 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* API Key Configuration / Offline Status Notice */}
-      {data?.error === 'NO_API_KEY_CONFIGURED' && !devModeEnabled && (
-        <div className="bg-amber-500/10 border-b border-amber-500/30 py-3 px-4 text-xs text-amber-200">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+      {/* Data availability notice (never shows fake data) */}
+      {error && (
+        <div role="status" className="bg-amber-500/10 border-b border-amber-500/30 py-3 px-4 text-xs text-amber-200">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Key className="w-4 h-4 text-amber-400 shrink-0" />
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
               <span>
-                <strong>Live API Credentials Pending:</strong> No <code className="bg-black/30 px-1 py-0.5 rounded font-mono">DATA_GOV_IN_API_KEY</code> is set in environment.
-                You can register a free key at <strong>data.gov.in</strong> or enable Developer Test Mode to preview realistic station feeds.
+                {data?.stations?.length
+                  ? 'Live data could not be refreshed just now. Showing the last readings we received.'
+                  : 'Live air quality data is temporarily unavailable from the government feeds. Please try again in a few minutes.'}
               </span>
             </div>
             <button
-              onClick={() => setDevModeEnabled(true)}
-              className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-100 font-semibold border border-amber-500/40 transition-all flex items-center gap-1.5"
+              onClick={() => refetch(true)}
+              className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-100 font-semibold border border-amber-500/40 transition-all"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>Enable Test Fixtures Mode</span>
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Result of a place search / GPS lookup */}
+      {locationNotice && (
+        <div role="status" className="bg-cyan-500/10 border-b border-cyan-500/20 py-2.5 px-4 text-xs text-cyan-200">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-cyan-300 shrink-0" />
+              <span>{locationNotice}</span>
+            </div>
+            <button onClick={clearLocationNotice} className="p-1 rounded text-gray-400 hover:text-white hover:bg-white/5" aria-label="Dismiss">
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -191,23 +242,29 @@ export default function HomePage() {
         {/* Global Search Bar (Omni-Search for Indian Localities) */}
         <section className="pt-6 px-4 max-w-7xl mx-auto flex flex-col items-center justify-center">
           <LocationSearchBar
-            onLocationSelected={async ({ name, city, latitude, longitude }) => {
-              // Automatically find closest station or calculate model estimate
-              const { AQIDataManager } = await import('@/lib/providers/manager');
-              const mgr = new AQIDataManager();
-              const result = await mgr.getAQIForLocation(latitude, longitude, name, city);
-              if (result?.primary) {
-                // If it's a model estimate, inject it into stations list and select it
-                if (result.isEstimate) {
-                  data?.stations?.unshift(result.primary);
-                }
-                setSelectedStationId(result.primary.id);
-              }
-            }}
+            onLocationSelected={({ name, city, latitude, longitude }) => selectLocation(latitude, longitude, name, city)}
             onLocateMe={requestLocation}
             isLocating={isLocating}
           />
         </section>
+
+        {!currentStation && (
+          <div className="max-w-7xl mx-auto px-4 py-24 text-center text-sm text-gray-400" aria-live="polite">
+            <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight mb-3">Delhi NCR AQI today</h1>
+            <p className="max-w-xl mx-auto mb-8 text-gray-400">
+              Live air quality for Delhi, Noida, Gurugram, Faridabad and Ghaziabad from official CPCB, DPCC, UPPCB and HSPCB stations.
+            </p>
+            {isLoading ? (
+              <div className="space-y-3">
+                <div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin mx-auto" />
+                <p>Fetching the latest readings from official monitoring stations…</p>
+                <p className="text-xs text-gray-500">The first load after a quiet period can take up to a minute.</p>
+              </div>
+            ) : (
+              <p>No air quality data to show yet.</p>
+            )}
+          </div>
+        )}
 
         {/* Hero Section */}
         {currentStation && (
@@ -216,6 +273,8 @@ export default function HomePage() {
             stations={stations}
             onSelectStation={(id) => setSelectedStationId(id)}
             onOpenShare={() => setShareModalOpen(true)}
+            onRefresh={() => refetch(true)}
+            isRefreshing={isLoading}
           />
         )}
 
@@ -243,7 +302,7 @@ export default function HomePage() {
               </div>
 
               <div className="text-[11px] font-mono text-gray-400">
-                <span>{stations.length} Monitored Points</span>
+                <span>{stations.filter((s) => s.aqi !== null && !s.isEstimate).length} reporting of {stations.filter((s) => !s.id.startsWith('model-')).length} stations</span>
               </div>
             </div>
 
@@ -302,48 +361,48 @@ export default function HomePage() {
                 Explore Hyperlocal Monitoring Stations
               </h3>
               <div className="flex flex-wrap gap-2 text-xs">
-                <a href="/delhi/anand-vihar" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
+                <Link href="/delhi/anand-vihar" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
                   Anand Vihar AQI →
-                </a>
-                <a href="/delhi/dwarka" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
+                </Link>
+                <Link href="/delhi/dwarka" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
                   Dwarka Sector 8 AQI →
-                </a>
-                <a href="/delhi/rohini" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
+                </Link>
+                <Link href="/delhi/rohini" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
                   Rohini Sector 16 AQI →
-                </a>
-                <a href="/delhi/ito" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
+                </Link>
+                <Link href="/delhi/ito" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
                   ITO Delhi AQI →
-                </a>
-                <a href="/delhi/punjabi-bagh" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
+                </Link>
+                <Link href="/delhi/punjabi-bagh" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
                   Punjabi Bagh AQI →
-                </a>
-                <a href="/delhi/rk-puram" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
+                </Link>
+                <Link href="/delhi/rk-puram" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
                   R.K. Puram AQI →
-                </a>
-                <a href="/noida" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
+                </Link>
+                <Link href="/noida" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
                   Noida AQI Live →
-                </a>
-                <a href="/noida/noida-sector-62" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
+                </Link>
+                <Link href="/noida/noida-sector-62" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
                   Sector 62 Noida AQI →
-                </a>
-                <a href="/gurugram" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
+                </Link>
+                <Link href="/gurugram" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
                   Gurugram AQI Live →
-                </a>
-                <a href="/ghaziabad" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
+                </Link>
+                <Link href="/ghaziabad" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
                   Ghaziabad AQI Live →
-                </a>
-                <a href="/faridabad" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
+                </Link>
+                <Link href="/faridabad" className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors">
                   Faridabad AQI Live →
-                </a>
-                <a href="/delhi" className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 font-semibold transition-colors">
+                </Link>
+                <Link href="/delhi" className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 font-semibold transition-colors">
                   All 18 Delhi CAAQMS Stations →
-                </a>
+                </Link>
               </div>
             </div>
 
             {/* Knowledge Centre Mini Feature */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-white/5">
-              <a
+              <Link
                 href="/learn/what-is-aqi"
                 className="p-5 rounded-2xl bg-[#0e141f] border border-white/10 hover:border-emerald-500/30 transition-all space-y-2 group"
               >
@@ -354,9 +413,9 @@ export default function HomePage() {
                 <p className="text-xs text-gray-400 leading-relaxed">
                   Understand the CPCB formula, the eight criteria pollutants, and the maximum sub-index rule.
                 </p>
-              </a>
+              </Link>
 
-              <a
+              <Link
                 href="/learn/pm25-vs-pm10"
                 className="p-5 rounded-2xl bg-[#0e141f] border border-white/10 hover:border-emerald-500/30 transition-all space-y-2 group"
               >
@@ -367,9 +426,9 @@ export default function HomePage() {
                 <p className="text-xs text-gray-400 leading-relaxed">
                   Learn microscopic differences, why PM2.5 penetrates into the bloodstream, and which masks work.
                 </p>
-              </a>
+              </Link>
 
-              <a
+              <Link
                 href="/learn/delhi-pollution-guide"
                 className="p-5 rounded-2xl bg-[#0e141f] border border-white/10 hover:border-emerald-500/30 transition-all space-y-2 group"
               >
@@ -380,7 +439,7 @@ export default function HomePage() {
                 <p className="text-xs text-gray-400 leading-relaxed">
                   Atmospheric temperature inversions, wind stagnation, and seasonal stubble burning explained.
                 </p>
-              </a>
+              </Link>
             </div>
           </div>
         </section>

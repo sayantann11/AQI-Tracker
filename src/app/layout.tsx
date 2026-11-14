@@ -1,10 +1,9 @@
 import type { Metadata } from 'next';
+import Script from 'next/script';
 import './globals.css';
+import { getSiteUrl } from '@/lib/site';
 
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL && !process.env.NEXT_PUBLIC_SITE_URL.includes('localhost')
-    ? process.env.NEXT_PUBLIC_SITE_URL
-    : 'https://airscope-india.onrender.com';
+const siteUrl = getSiteUrl();
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -69,6 +68,10 @@ export const metadata: Metadata = {
   alternates: {
     canonical: '/',
   },
+  icons: { icon: '/icon.svg', apple: '/icon.svg' },
+  verification: process.env.NEXT_PUBLIC_GSC_VERIFICATION
+    ? { google: process.env.NEXT_PUBLIC_GSC_VERIFICATION }
+    : undefined,
 };
 
 export default function RootLayout({
@@ -91,7 +94,7 @@ export default function RootLayout({
     '@type': 'Organization',
     name: 'AirScope India',
     url: siteUrl,
-    logo: `${siteUrl}/logo.png`,
+    logo: `${siteUrl}/icon.svg`,
     description:
       'AirScope India provides hyperlocal real-time air quality data for Delhi NCR powered by official CPCB and DPCC monitoring stations.',
     areaServed: {
@@ -103,9 +106,8 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <head>
-        <link rel="preconnect" href="https://api.data.gov.in" />
         <link rel="preconnect" href="https://basemaps.cartocdn.com" />
-        <link rel="dns-prefetch" href="https://api.openaq.org" />
+        <link rel="dns-prefetch" href="https://photon.komoot.io" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
@@ -117,6 +119,15 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-[#090d12] text-slate-100 antialiased selection:bg-emerald-500/30 selection:text-emerald-300">
         {children}
+        {process.env.NEXT_PUBLIC_ENABLE_ADS === 'true' && process.env.NEXT_PUBLIC_ADSENSE_CLIENT_ID && (
+          <Script
+            id="adsense-loader"
+            async
+            strategy="afterInteractive"
+            crossOrigin="anonymous"
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${process.env.NEXT_PUBLIC_ADSENSE_CLIENT_ID}`}
+          />
+        )}
       </body>
     </html>
   );

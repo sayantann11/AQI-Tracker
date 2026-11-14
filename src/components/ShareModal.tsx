@@ -27,7 +27,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ station, isOpen, onClose
 AQI: ${aqiText} (${categoryLabel})
 Primary Pollutant: ${station.prominentPollutant?.toUpperCase() || 'PM2.5'}
 Updated: ${timeStr} IST via AirScope India
-Know the air around you: ${typeof window !== 'undefined' ? window.location.href : 'https://airscope-india.onrender.com'}`;
+Know the air around you: ${typeof window !== 'undefined' ? window.location.href : 'https://aqi-tracker-1d1s.onrender.com'}`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(shareText);

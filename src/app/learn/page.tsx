@@ -3,8 +3,9 @@ import Link from 'next/link';
 import { Navigation } from '@/components/Navigation';
 import { Footer } from '@/components/Footer';
 import { BookOpen, ShieldCheck, Activity, Wind, AlertTriangle, ArrowRight, HelpCircle } from 'lucide-react';
+import { getSiteUrl } from '@/lib/site';
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://airscope-india.onrender.com';
+const siteUrl = getSiteUrl();
 
 export const metadata: Metadata = {
   title: 'Air Quality Knowledge Centre — Learn AQI, PM2.5, Health Impact',

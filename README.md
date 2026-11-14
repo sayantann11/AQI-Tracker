@@ -4,7 +4,7 @@
 
 AirScope India is a modern, high-precision, interactive air quality intelligence platform built specifically for the **National Capital Region (NCR)**—covering Delhi, Noida, Greater Noida, Gurugram, Faridabad, and Ghaziabad—with an architecture primed for pan-India expansion.
 
-Built for deployment on **Render Static Sites** with an edge proxy on **Cloudflare Workers**, AirScope India delivers a zero-infrastructure-cost base (**₹0/month**) while maintaining scientific and legal integrity.
+Built for deployment as a **Render Web Service** (the Cloudflare worker in `worker/` is no longer needed), AirScope India delivers a zero-infrastructure-cost base (**₹0/month**) while maintaining scientific and legal integrity.
 
 ---
 
@@ -30,8 +30,8 @@ Built for deployment on **Render Static Sites** with an edge proxy on **Cloudfla
 | **3D Graphics** | Three.js (WebGL Particle Sphere & Core Glow) |
 | **Geospatial Mapping** | MapLibre GL JS + Carto Dark Matter Vector/Raster Tiles |
 | **Unit Testing** | Vitest (Automated NAQI math & normalizer test suite) |
-| **Edge API Proxy** | Cloudflare Workers (Free tier: 100,000 requests/day) |
-| **Hosting Platform** | Render Static Site (₹0 / month) |
+| **Backup data** | OpenAQ v3 + Open-Meteo CAMS model |
+| **Hosting Platform** | Render Web Service, free plan |
 | **Official Data Source** | CPCB CAAQMS via data.gov.in under GODL India License |
 
 ---
@@ -93,16 +93,16 @@ npm run build
 
 ---
 
-## 🌐 Production Deployment (₹0 Cost Target)
+## 🌐 Production Deployment
 
-Detailed deployment walk-throughs are available in the [`docs/`](./docs) directory:
+Deploy as a **Render Web Service** (not a Static Site) so the server-side `/api/aqi` route can call the data providers with your secret keys. Full steps: [`docs/GO_LIVE.md`](./docs/GO_LIVE.md). A `render.yaml` Blueprint is included.
 
-1. **Edge Proxy Setup**: See [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for one-line Cloudflare Worker deployment.
-2. **Render Static Site Setup**: Set Build Command to `npm install && STATIC_EXPORT=true npm run build` and Publish Directory to `out`.
-3. **Data Governance & Legal Compliance**: See [`docs/DATA_SOURCES.md`](./docs/DATA_SOURCES.md) for Government Open Data License (GODL) terms.
-4. **Monetization & Ads**: See [`docs/MONETIZATION.md`](./docs/MONETIZATION.md) for AdSense subdomain caveats and affiliate setups.
+Data pipeline (all server-side, cached 10 min):
+1. **CPCB via data.gov.in**: official primary feed (`DATA_GOV_IN_API_KEY`).
+2. **OpenAQ v3**: second government-monitor feed to fill gaps (`OPENAQ_API_KEY`).
+3. **Open-Meteo / Copernicus CAMS**: clearly-labelled model estimate for offline stations and for places with no monitor within ~8 km. Never mixed into averages or rankings.
 
----
+Diagnostics: `/api/status` (provider health, station counts) and `/api/health` (uptime ping).
 
 ## 📜 Statutory Data Attribution
 
