@@ -1,5 +1,5 @@
 import { MetadataRoute } from 'next';
-import { DELHI_NCR_STATIONS } from '@/lib/fixtures/delhi-stations';
+import { DELHI_NCR_STATIONS, POPULAR_UNMONITORED_LOCALITIES } from '@/lib/fixtures/delhi-stations';
 import { getSiteUrl } from '@/lib/site';
 
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -28,6 +28,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
   }));
 
   // Noida locality pages
+  const unmonSlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const unmonDelhi = POPULAR_UNMONITORED_LOCALITIES.filter((u) => u.city === 'Delhi');
+  const unmonDelhiUrls: MetadataRoute.Sitemap = unmonDelhi.map((u) => ({
+    url: `${siteUrl}/delhi/${unmonSlug(u.name)}`,
+    lastModified: new Date(),
+    changeFrequency: 'hourly',
+    priority: 0.8,
+  }));
+
   const noidaStations = DELHI_NCR_STATIONS.filter((s) => s.city === 'Noida');
   const noidaLocalityUrls: MetadataRoute.Sitemap = noidaStations.map((station) => ({
     url: `${siteUrl}/noida/${station.slug}`,
@@ -75,6 +84,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     ...cityUrls,
     ...delhiLocalityUrls,
+    ...unmonDelhiUrls,
     ...noidaLocalityUrls,
     ...learnUrls,
     ...staticPages,
