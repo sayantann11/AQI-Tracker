@@ -191,14 +191,27 @@ export class CPCBProvider implements AQIDataProvider {
       url.searchParams.set('limit', String(PAGE));
       url.searchParams.set('offset', String(offset));
 
-      const response = await fetch(url.toString(), {
-        headers: { Accept: 'application/json' },
-        cache: 'no-store',
-        signal: AbortSignal.timeout(25000),
-      });
-      if (!response.ok) {
-        if (offset > 0 && records.length > 0) break; // keep what we have
-        throw new Error(`CPCB API error: HTTP ${response.status} ${response.statusText}`);
+      let response: Response | null = null;
+      let lastErr: unknown = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          response = await fetch(url.toString(), {
+            headers: { Accept: 'application/json', 'User-Agent': 'AirScope-India/1.0' },
+            cache: 'no-store',
+            signal: AbortSignal.timeout(45000),
+          });
+          if (response.ok) break;
+          lastErr = new Error(`HTTP ${response.status}`);
+          if (response.status < 500) break; // 4xx: no point retrying
+        } catch (e) {
+          lastErr = e;
+        }
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      if (!response || !response.ok) {
+        if (records.length > 0) break; // keep what we have
+        console.error('[cpcb] fetch failed after retries:', lastErr);
+        throw new Error(`CPCB API error: ${(lastErr as Error)?.message || 'fetch failed'}`);
       }
       const data = await response.json();
       const page: CPCBRecordFixture[] = data.records || [];
