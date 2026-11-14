@@ -190,8 +190,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                             <option key={st.id} value={st.id}>
                               {st.name}{' '}
                               {st.aqi !== null
-                                ? `(AQI ${st.aqi}${st.isEstimate ? ', est.' : st.freshnessStatus === 'stale' ? ', old data' : ''})`
-                                : '(Offline)'}
+                                ? `(AQI ${st.liveEstimate?.aqi ?? st.aqi})`
+                                : ''}
                             </option>
                           ))}
                       </optgroup>
@@ -209,12 +209,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </div>
             </div>
 
-            {currentStation.liveEstimate && (
-              <p className="text-[11px] text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2 max-w-xl">
-                This station last reported {Math.max(1, Math.round((Date.now() - new Date(currentStation.lastUpdated).getTime()) / 3600000))} hours ago.
-                Estimated right now from nearby live stations: <strong>≈{currentStation.liveEstimate.aqi} ({currentStation.liveEstimate.label})</strong>.
-              </p>
-            )}
 
             {currentStation.isEstimate && (
               <p className="text-[11px] text-cyan-300/90 bg-cyan-500/10 border border-cyan-500/20 rounded-xl px-3 py-2 max-w-xl">
