@@ -233,7 +233,24 @@ export async function generateMetadata({ params }: LocalityPageProps): Promise<M
   const editorial = LOCALITY_EDITORIAL[locKey];
   const station = DELHI_NCR_STATIONS.find((s) => s.slug === locKey && s.city === 'Delhi');
 
-  if (!editorial || !station) return {};
+  if (!editorial || !station) {
+    const unmon = POPULAR_UNMONITORED_LOCALITIES.find(
+      (u) => u.city === 'Delhi' && unmonitoredSlug(u.name) === locKey,
+    );
+    if (unmon) {
+      const title = `${unmon.name} AQI Today — Live Air Quality, PM2.5 & Pollution | Delhi | AirScope India`;
+      const description = `${unmon.name} air quality index (AQI) today, estimated from the nearest CPCB/DPCC monitoring stations within 15 km. Live PM2.5, PM10 and health guidance for ${unmon.name}, South Delhi.`;
+      const url = `${siteUrl}/delhi/${locKey}`;
+      return {
+        title,
+        description,
+        alternates: { canonical: url },
+        openGraph: { title, description, url, type: 'website' },
+        twitter: { card: 'summary_large_image', title, description },
+      };
+    }
+    return {};
+  }
 
   const url = `${siteUrl}/delhi/${locKey}`;
 
