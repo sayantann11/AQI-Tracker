@@ -13,7 +13,7 @@ const STATE_BY_CITY: Record<string, string> = {
   Delhi: 'Delhi', Noida: 'Uttar Pradesh', 'Greater Noida': 'Uttar Pradesh', Ghaziabad: 'Uttar Pradesh',
   Meerut: 'Uttar Pradesh', Baghpat: 'Uttar Pradesh', Bulandshahr: 'Uttar Pradesh', Modinagar: 'Uttar Pradesh', Khora: 'Uttar Pradesh',
   Gurugram: 'Haryana', Faridabad: 'Haryana', Sonipat: 'Haryana', Bahadurgarh: 'Haryana', Dharuhera: 'Haryana',
-  Manesar: 'Haryana', Ballabgarh: 'Haryana', Panchgaon: 'Haryana', Bhiwadi: 'Rajasthan',
+  Manesar: 'Haryana', Ballabgarh: 'Haryana', Panchgaon: 'Haryana', Panipat: 'Haryana', Rewari: 'Haryana', Bhiwadi: 'Rajasthan', Alwar: 'Rajasthan', Hapur: 'Uttar Pradesh',
 };
 
 const titleCase = (s: string) => s.replace(/\w\S*/g, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase());
@@ -28,8 +28,12 @@ export function parseStationName(raw: string): { name: string; cityHint: string 
 /** Resolve a display city: explicit hint first, otherwise the nearest registry station within 25 km. */
 export function inferCity(hint: string | null, lat: number, lng: number): string {
   if (hint) {
-    const alias = CITY_ALIASES[hint.toLowerCase()];
-    return alias || titleCase(hint);
+    const h = hint.trim();
+    const alias = CITY_ALIASES[h.toLowerCase()];
+    if (alias) return alias;
+    // Guard against OpenAQ "locality" fields that are a state abbreviation or empty.
+    const BAD = new Set(['up', 'uk', 'mp', 'hr', 'rj', 'dl', 'nct', 'in', 'india']);
+    if (h.length >= 3 && !BAD.has(h.toLowerCase())) return titleCase(h);
   }
   let best: { city: string; d: number } | null = null;
   for (const s of DELHI_NCR_STATIONS) {

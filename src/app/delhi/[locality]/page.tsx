@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { DELHI_NCR_STATIONS } from '@/lib/fixtures/delhi-stations';
+import { DELHI_NCR_STATIONS, POPULAR_UNMONITORED_LOCALITIES } from '@/lib/fixtures/delhi-stations';
 import { Navigation } from '@/components/Navigation';
 import { Footer } from '@/components/Footer';
 import { MapPin, ShieldCheck, ArrowLeft, Wind, ExternalLink, HelpCircle } from 'lucide-react';
@@ -218,9 +218,14 @@ const LOCALITY_EDITORIAL: Record<
   },
 };
 
+const unmonitoredSlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
 export async function generateStaticParams() {
   const delhiStations = DELHI_NCR_STATIONS.filter((s) => s.city === 'Delhi');
-  return delhiStations.map((s) => ({ locality: s.slug }));
+  const unmon = POPULAR_UNMONITORED_LOCALITIES
+    .filter((u) => u.city === 'Delhi')
+    .map((u) => ({ locality: unmonitoredSlug(u.name) }));
+  return [...delhiStations.map((s) => ({ locality: s.slug })), ...unmon];
 }
 
 export async function generateMetadata({ params }: LocalityPageProps): Promise<Metadata> {
@@ -252,12 +257,55 @@ export async function generateMetadata({ params }: LocalityPageProps): Promise<M
   };
 }
 
+
+function UnmonitoredLocalityPage({ name, lat, lng, description }: { name: string; lat: number; lng: number; description: string }) {
+  const url = `/?lat=${lat}&lng=${lng}&name=${encodeURIComponent(name)}`;
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-950 to-black text-white">
+      <div className="mx-auto max-w-3xl px-4 py-16">
+        <nav className="text-sm text-gray-400 mb-6">
+          <a href="/" className="hover:text-white">Home</a> / {name}, Delhi
+        </nav>
+        <h1 className="text-3xl md:text-4xl font-bold mb-4">{name} Air Quality (AQI) Today</h1>
+        <p className="text-gray-300 mb-6">{description}</p>
+        <div className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-4">
+          <p className="text-gray-200">
+            There is no official CPCB station in {name}. We estimate live AQI here from the nearest monitoring stations.
+          </p>
+          <a
+            href={url}
+            className="inline-block px-5 py-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-medium"
+          >
+            Show live AQI for {name} →
+          </a>
+        </div>
+        <p className="text-xs text-gray-500 mt-8">
+          Based on distance-weighted interpolation of real-time readings from the CPCB CAAQMS network within 15 km, falling back to the ECMWF CAMS atmospheric model when no station is within range.
+        </p>
+      </div>
+    </main>
+  );
+}
+
 export default function LocalityPage({ params }: LocalityPageProps) {
   const locKey = params.locality.toLowerCase();
   const editorial = LOCALITY_EDITORIAL[locKey];
   const station = DELHI_NCR_STATIONS.find((s) => s.slug === locKey && s.city === 'Delhi');
 
   if (!editorial || !station) {
+    const unmon = POPULAR_UNMONITORED_LOCALITIES.find(
+      (u) => u.city === 'Delhi' && unmonitoredSlug(u.name) === locKey,
+    );
+    if (unmon) {
+      return (
+        <UnmonitoredLocalityPage
+          name={unmon.name}
+          lat={unmon.latitude}
+          lng={unmon.longitude}
+          description={unmon.description}
+        />
+      );
+    }
     notFound();
   }
 

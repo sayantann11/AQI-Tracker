@@ -27,3 +27,7 @@ services:
         sync: false
       - key: NEXT_PUBLIC_CONTACT_EMAIL
         sync: false
+      - key: NEXT_PUBLIC_GA_ID
+        sync: false
+      - key: NEXT_PUBLIC_CLARITY_ID
+        sync: false
