@@ -23,3 +23,21 @@ The site was deployed as a Render **Static Site** (`STATIC_EXPORT=true`). A stat
 
 ## Ads
 See `docs/MONETIZATION.md` and the notes in the chat hand-off: AdSense generally will not approve an `onrender.com` subdomain. Keep `NEXT_PUBLIC_ENABLE_ADS=false` until approved.
+
+## Production checklist (Render free plan, step by step)
+
+1. **Push** the repo to GitHub (`git push origin main`).
+2. **Delete the old Static Site** in Render (Dashboard → the static site → Settings → Delete). It cannot run `/api/*`.
+3. **New → Blueprint** → pick this repo. Render reads `render.yaml` and creates the Web Service `aqi-tracker`.
+   (Or New → Web Service: Runtime Node, Build `npm ci && npm run build`, Start `npm start`, Health check path `/api/health`, Plan Free.)
+4. **Environment** (service → Environment): set `DATA_GOV_IN_API_KEY` and `OPENAQ_API_KEY`.
+   Do NOT set `ALLOW_FIXTURES`. Optionally set `NEXT_PUBLIC_SITE_URL` to your real URL.
+5. **Verify** after deploy: open `/api/health` (200), `/api/status` (cpcb/openaq `ok: true`, `measuredStations` > 50), then the home page.
+6. **Keep it awake (free plan sleeps after 15 min idle):**
+   - UptimeRobot (free): HTTP monitor on `https://<your-service>.onrender.com/api/health`, interval 5 min. Primary.
+   - GitHub backup: repo → Settings → Secrets and variables → Actions → Variables → add `SITE_URL`. `.github/workflows/keepalive.yml` then pings every 10 min.
+   - Free plan gives 750 instance-hours/month, enough for one always-on service (744 h).
+7. **Never down on deploy:** `healthCheckPath` makes Render keep the old version serving until the new one is healthy.
+8. **If upstream APIs fail:** the server serves the last good cached data and `/api/status` shows which source is down; it never shows sample data.
+9. **True zero-cold-start** needs a paid instance (Render Starter, about $7/month). Upgrade when ad revenue covers it.
+10. CI (`.github/workflows/ci.yml`) runs type-check, tests and build on every push; Render auto-deploys from `main`.

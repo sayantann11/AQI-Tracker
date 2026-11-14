@@ -1,0 +1,13 @@
+# Backup keep-awake ping for Render's free plan (primary: UptimeRobot every 5 min).
+# Set repository variable SITE_URL, e.g. https://aqi-tracker-1d1s.onrender.com
+name: Keep alive
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    if: ${{ vars.SITE_URL != '' }}
+    steps:
+      - run: curl -fsS --retry 3 --retry-delay 20 --max-time 60 "${{ vars.SITE_URL }}/api/health"

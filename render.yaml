@@ -12,6 +12,8 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
       - key: DATA_GOV_IN_API_KEY
         sync: false
       - key: OPENAQ_API_KEY
