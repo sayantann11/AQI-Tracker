@@ -2,7 +2,8 @@ import { StationMeasurement, PollutantId, PollutantReading } from '@/types/aqi';
 import { AQIDataProvider, ProviderAttribution } from './types';
 import { calculateNationalAQI, calculateSubIndex } from '../aqi/calculator';
 import { getAQICategory } from '../aqi/category';
-import { matchStationByCoordinates } from '../utils/geo';
+import { matchStationWithin } from '../utils/geo';
+import { parseStationName, inferCity, stateForCity } from '../utils/station-names';
 
 export const OPENAQ_ATTRIBUTION: ProviderAttribution = {
   dataset: 'OpenAQ Real-time Air Quality Data',
@@ -16,7 +17,7 @@ const OPENAQ_BASE_URL = 'https://api.openaq.org/v3';
 // bbox = min_lon,min_lat,max_lon,max_lat  (Delhi NCR)
 const NCR_BBOX = '76.7,28.15,77.8,29.0';
 // Free tier is 60 req/min: 1 list call + at most MAX_LOCATIONS latest calls
-const MAX_LOCATIONS = 45;
+const MAX_LOCATIONS = 55;
 const MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 const PARAM_MAP: Record<string, PollutantId> = {
@@ -138,7 +139,9 @@ export class OpenAQProvider implements AQIDataProvider {
 
     const lat = loc.coordinates.latitude;
     const lng = loc.coordinates.longitude;
-    const meta = matchStationByCoordinates(lat, lng);
+    const meta = matchStationWithin(lat, lng, 1.2);
+    const parsed = parseStationName(String(loc.name || ''));
+    const city = meta?.city || inferCity(parsed.cityHint, lat, lng);
     const aqiResult = calculateNationalAQI(conc);
     const updated = new Date(latest);
     const ageH = (Date.now() - latest) / 3600000;
@@ -146,9 +149,9 @@ export class OpenAQProvider implements AQIDataProvider {
 
     return {
       id: meta?.id || `openaq-${loc.id}`,
-      name: meta?.name || String(loc.name || 'Delhi NCR station'),
-      city: meta?.city || 'Delhi',
-      state: meta?.state || 'Delhi',
+      name: meta?.name || parsed.name || 'Delhi NCR station',
+      city,
+      state: meta?.state || stateForCity(city),
       latitude: lat,
       longitude: lng,
       aqi: aqiResult.aqi,
@@ -159,10 +162,10 @@ export class OpenAQProvider implements AQIDataProvider {
       lastUpdated: updated.toISOString(),
       fetchedAt: new Date().toISOString(),
       isStale: stale,
-      freshnessStatus: ageH <= 1 ? 'fresh' : ageH <= 3 ? 'delayed' : 'stale',
+      freshnessStatus: ageH <= 1.5 ? 'fresh' : ageH <= 3 ? 'delayed' : 'stale',
       stationStatus: aqiResult.activeCount > 0 ? (stale ? 'delayed' : 'reporting') : 'not_reporting',
       source: 'OpenAQ (government monitor)',
-      agency: meta?.agency,
+      agency: meta?.agency || parsed.agency || undefined,
       address: meta?.address,
       dataQualityStatus: stale ? 'stale' : aqiResult.isSufficient ? 'active' : 'insufficient_data',
     };

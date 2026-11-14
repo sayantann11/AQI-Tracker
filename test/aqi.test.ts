@@ -14,6 +14,8 @@ import { filterNCRRecords, isInNCR } from '../src/lib/providers/cpcb';
 import { OpenAQProvider, convertToCpcbUnit } from '../src/lib/providers/openaq';
 import { OpenMeteoProvider } from '../src/lib/providers/openmeteo';
 import { estimateFromNeighbors } from '../src/lib/aqi/neighbors';
+import { parseStationName, inferCity, stateForCity } from '../src/lib/utils/station-names';
+import { matchStationWithin } from '../src/lib/utils/geo';
 import { calculateDistanceKm, findNearestStation, resolveLocalityOrStation } from '../src/lib/utils/geo';
 import { CPCB_SAMPLE_RECORDS } from '../src/lib/fixtures/cpcb-sample';
 import { DELHI_NCR_STATIONS } from '../src/lib/fixtures/delhi-stations';
@@ -601,6 +603,25 @@ describe('Nearby-station estimates for areas without a monitor', () => {
     const offline = mk('off', 28.6, 77.21, 100, 100, { aqi: null });
     const est = mk('est', 28.6, 77.21, 100, 100, { isEstimate: true });
     expect(estimateFromNeighbors(target, [tooFar, stale, offline, est])).toBeNull();
+  });
+});
+
+describe('Station naming and matching', () => {
+  it('splits agency/city suffixes from OpenAQ-style names', () => {
+    expect(parseStationName('Sector-116, Noida - UPPCB')).toEqual({ name: 'Sector-116', cityHint: 'Noida', agency: 'UPPCB' });
+    expect(parseStationName('Sirifort, Delhi - CPCB').name).toBe('Sirifort');
+    expect(parseStationName('Rajiv Chowk').cityHint).toBeNull();
+  });
+  it('infers the right city instead of defaulting everything to Delhi', () => {
+    expect(inferCity('Noida', 28.5, 77.4)).toBe('Noida');
+    expect(inferCity('Gurgaon', 28.4, 77.0)).toBe('Gurugram');
+    expect(inferCity('Baghpat', 28.9, 77.2)).toBe('Baghpat');
+    expect(stateForCity('Baghpat')).toBe('Uttar Pradesh');
+    expect(inferCity(null, 28.4067, 77.3178)).toBe('Faridabad');
+  });
+  it('does not match a station that is more than 1.2 km away (DTU must not become Rohini Sec-16)', () => {
+    expect(matchStationWithin(28.75005, 77.11126, 1.2)).toBeNull();
+    expect(matchStationWithin(28.7325, 77.1199, 1.2)?.id).toBe('delhi-rohini-sec16');
   });
 });
 

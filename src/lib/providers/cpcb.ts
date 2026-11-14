@@ -56,7 +56,7 @@ export function parseCPCBDate(dateStr: string): Date {
 
 /**
  * Calculates 4-tier data freshness based on observation timestamp.
- * - fresh: < 1 hour
+ * - fresh: <= 1.5 hours (feeds publish hourly)
  * - delayed: 1 - 3 hours
  * - stale: > 3 hours
  * - unavailable: no valid timestamp
@@ -64,7 +64,7 @@ export function parseCPCBDate(dateStr: string): Date {
 export function getFreshnessStatus(date: Date, now: Date = new Date()): DataFreshness {
   const diffHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
   if (isNaN(diffHours) || diffHours < 0) return 'unavailable';
-  if (diffHours <= 1) return 'fresh';
+  if (diffHours <= 1.5) return 'fresh'; // hourly feeds are normally ~1h old when published
   if (diffHours <= 3) return 'delayed';
   return 'stale';
 }

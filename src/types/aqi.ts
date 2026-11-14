@@ -76,6 +76,8 @@ export interface StationMeasurement {
   isEstimate?: boolean;
   /** Short human-readable explanation shown when a value is an estimate */
   estimateNote?: string;
+  /** For stale stations: estimate of right-now AQI from nearby live stations */
+  liveEstimate?: { aqi: number; label: string; note: string };
 }
 
 export interface CitySummary {

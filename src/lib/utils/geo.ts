@@ -40,6 +40,20 @@ export function matchStationByCoordinates(lat: number, lng: number): StationMeta
   return closest;
 }
 
+/** Like matchStationByCoordinates but with a caller-chosen radius (default 1.2 km). */
+export function matchStationWithin(lat: number, lng: number, maxKm = 1.2): StationMetadata | null {
+  let closest: StationMetadata | null = null;
+  let min = maxKm;
+  for (const station of DELHI_NCR_STATIONS) {
+    const d = calculateDistanceKm(lat, lng, station.latitude, station.longitude);
+    if (d <= min) {
+      min = d;
+      closest = station;
+    }
+  }
+  return closest;
+}
+
 /**
  * Finds the nearest monitoring station to a user's location.
  */

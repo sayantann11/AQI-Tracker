@@ -54,7 +54,7 @@ export function mergeProviderStations(...lists: StationMeasurement[][]): Station
       else {
         const best = pickBetterReading(merged[idx], st);
         // keep the registry identity (id/name/city) of the first record
-        merged[idx] = best === merged[idx] ? best : { ...best, id: merged[idx].id, name: merged[idx].name, city: merged[idx].city, state: merged[idx].state, agency: merged[idx].agency ?? best.agency, address: merged[idx].address ?? best.address };
+        merged[idx] = best === merged[idx] ? best : { ...best, id: merged[idx].id, name: merged[idx].name, city: merged[idx].city, state: merged[idx].state, latitude: merged[idx].latitude, longitude: merged[idx].longitude, agency: merged[idx].agency ?? best.agency, address: merged[idx].address ?? best.address };
       }
     }
   }
@@ -89,7 +89,10 @@ export class AQIDataManager {
    */
   async getAQIForLocation(lat: number, lng: number, locationName: string, city = 'Delhi NCR') {
     const latest = await this.getLatestAQI();
-    const real = latest.stations.filter((s) => hasReading(s) && !s.isEstimate);
+    const allReal = latest.stations.filter((s) => hasReading(s) && !s.isEstimate);
+    // Prefer stations reported within 3 h; only fall back to older ones if nothing fresh exists
+    const freshReal = allReal.filter((s) => s.freshnessStatus !== 'stale');
+    const real = freshReal.length > 0 ? freshReal : allReal;
     const ranked = real
       .map((s) => ({ station: s, distKm: Math.round(calculateDistanceKm(lat, lng, s.latitude, s.longitude) * 10) / 10 }))
       .sort((a, b) => a.distKm - b.distKm);
@@ -142,16 +145,16 @@ export class AQIDataManager {
 
   private async refresh(allowDevFixtures: boolean): Promise<AQIApiResponse> {
     const sources: SourceStatus[] = [];
-    const lists: StationMeasurement[][] = [];
+    const slots: StationMeasurement[][] = [[], []]; // fixed order: CPCB first, OpenAQ second (ids must not depend on which API answers first)
 
-    const run = async (id: string, name: string, configured: boolean, fn: () => Promise<StationMeasurement[]>) => {
+    const run = async (slot: number, id: string, name: string, configured: boolean, fn: () => Promise<StationMeasurement[]>) => {
       if (!configured) {
         sources.push({ id, name, configured: false, ok: false, stationCount: 0 });
         return;
       }
       try {
         const rows = await fn();
-        lists.push(rows);
+        slots[slot] = rows;
         sources.push({ id, name, configured: true, ok: true, stationCount: rows.length });
       } catch (err: any) {
         console.warn(`[aqi] ${name} failed:`, err?.message || err);
@@ -160,10 +163,11 @@ export class AQIDataManager {
     };
 
     await Promise.all([
-      run('cpcb', 'CPCB via data.gov.in', this.cpcbProvider.isConfigured(), () => this.cpcbProvider.fetchStations()),
-      run('openaq', 'OpenAQ v3', this.openaqProvider.isConfigured(), () => this.openaqProvider.fetchStations()),
+      run(0, 'cpcb', 'CPCB via data.gov.in', this.cpcbProvider.isConfigured(), () => this.cpcbProvider.fetchStations()),
+      run(1, 'openaq', 'OpenAQ v3', this.openaqProvider.isConfigured(), () => this.openaqProvider.fetchStations()),
     ]);
 
+    const lists = slots;
     const useFixtures =
       lists.every((l) => l.length === 0) &&
       allowDevFixtures &&
@@ -202,6 +206,20 @@ export class AQIDataManager {
           sources.push({ id: 'openmeteo', name: 'Open-Meteo CAMS model (offline fill)', configured: true, ok: false, stationCount: 0, error: String(err?.message || err).slice(0, 160) });
         }
       }
+    }
+
+    // Stale stations: attach a "right now" estimate from nearby live stations
+    if (!useFixtures) {
+      const live = stations.filter((s) => hasReading(s) && !s.isEstimate && s.freshnessStatus !== 'stale');
+      stations = stations.map((s) => {
+        if (s.isEstimate || !hasReading(s) || s.freshnessStatus !== 'stale') return s;
+        const est = estimateFromNeighbors(
+          { id: s.id, name: s.name, city: s.city, state: s.state, latitude: s.latitude, longitude: s.longitude },
+          live,
+          { maxAgeHours: 3 }
+        );
+        return est ? { ...s, liveEstimate: { aqi: est.aqi!, label: est.category.label, note: est.estimateNote || '' } } : s;
+      });
     }
 
     const measured = stations.filter((s) => hasReading(s) && !s.isEstimate);
@@ -275,7 +293,7 @@ export class AQIDataManager {
     return Array.from(resultMap.values());
   }
 
-  /** City summaries use measured stations only; model estimates never feed averages or extremes. */
+  /** City summaries use measured, non-stale (<3 h) stations only; estimates never feed averages or extremes. */
   private generateCitySummaries(stations: StationMeasurement[]): CitySummary[] {
     const cityGroups = new Map<string, StationMeasurement[]>();
     for (const s of stations) {
@@ -284,7 +302,7 @@ export class AQIDataManager {
     }
     const summaries: CitySummary[] = [];
     for (const [cityName, cityStations] of cityGroups) {
-      const active = cityStations.filter((s) => hasReading(s) && !s.isEstimate);
+      const active = cityStations.filter((s) => hasReading(s) && !s.isEstimate && s.freshnessStatus !== 'stale');
       const state = cityStations[0]?.state || 'Delhi';
       if (active.length === 0) {
         summaries.push({

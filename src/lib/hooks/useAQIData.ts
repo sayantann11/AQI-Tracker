@@ -99,6 +99,10 @@ export function useAQIData() {
           writeUrl({ station: null, loc: `${lat.toFixed(4)},${lng.toFixed(4)},${name}` });
           setLocationNotice(`No official monitor right at ${name}. ${primary.estimateNote || 'Showing an estimate for this spot.'}`);
         } else {
+          // keep the resolved station selectable even if this browser's copy of the list has a different id/snapshot
+          if (!dataRef.current?.stations.some((s) => s.id === primary.id)) {
+            setExtraStations((prev) => [primary, ...prev.filter((s) => s.id !== primary.id)].slice(0, 5));
+          }
           setSelectedStationId(primary.id);
           writeUrl({ station: primary.id, loc: null });
           setLocationNotice(
